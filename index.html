@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Correlación de Distrito — Informe</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="panel" id="panel">
+      <header class="panel__head">
+        <p class="eyebrow">Distrito Viedma</p>
+        <h1>Correlación</h1>
+      </header>
+
+      <div class="panel__actions panel__actions--top">
+        <button type="button" class="btn btn--primary" id="btnDownload">Descargar PDF</button>
+        <button type="button" class="btn btn--ghost" id="btnPrint">Imprimir</button>
+        <p class="hint" id="status"></p>
+      </div>
+
+      <details open class="import-box">
+        <summary>Importar desde LCR</summary>
+        <p class="muted small">
+          Cargá un CSV/JSON exportado de LCR. En GitHub Pages los datos viven en
+          <code>lcr-export.json</code> / <code>tabla_exportada.csv</code> del repo:
+          para actualizar, subí el archivo nuevo y hacé push.
+        </p>
+        <label class="check">
+          <input type="checkbox" id="onlyConverts" checked />
+          Solo conversos (is convert = Sí)
+        </label>
+        <div class="panel__actions panel__actions--inline">
+          <button type="button" class="btn btn--primary" id="btnPasteLcr">Pegar JSON</button>
+          <label class="btn btn--ghost file-btn">
+            Elegir CSV/JSON
+            <input type="file" id="lcrFile" accept=".csv,.json,text/csv,application/json" hidden />
+          </label>
+        </div>
+        <p class="hint" id="importStatus"></p>
+      </details>
+
+      <details open class="import-box" id="sheetsBox">
+        <summary>Google Sheets</summary>
+        <p class="muted small">
+          Pegá la URL de la app web de Apps Script (<code>google-apps-script/Code.gs</code>)
+          y el mismo token que configuraste en el script. Así los tildes y datos de cada fila
+          se guardan en la hoja.
+        </p>
+        <label class="field">
+          <span>URL Apps Script</span>
+          <input id="sheetsUrl" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" />
+        </label>
+        <label class="field">
+          <span>Token</span>
+          <input id="sheetsToken" type="password" placeholder="Mismo valor que SCRIPT_TOKEN" autocomplete="off" />
+        </label>
+        <label class="check">
+          <input type="checkbox" id="sheetsAutosave" checked />
+          Guardar en Sheets al tildar / editar (automático)
+        </label>
+        <label class="check">
+          <input type="checkbox" id="sheetsLoadOnOpen" />
+          Al abrir, cargar desde Sheets
+        </label>
+        <div class="panel__actions panel__actions--inline">
+          <button type="button" class="btn btn--primary" id="btnSheetsSave">Guardar ahora</button>
+          <button type="button" class="btn btn--ghost" id="btnSheetsLoad">Cargar</button>
+        </div>
+        <p class="hint" id="sheetsStatus"></p>
+      </details>
+
+      <details>
+        <summary>Editar datos del informe</summary>
+
+        <label class="field">
+          <span>Título</span>
+          <input id="metaTitle" type="text" value="Distrito Viedma" />
+        </label>
+        <label class="field">
+          <span>Período</span>
+          <input id="metaPeriod" type="text" value="Agosto 2026" />
+        </label>
+
+        <details>
+          <summary>Bautismos del año</summary>
+          <div id="baptismsEditor" class="stack"></div>
+        </details>
+
+        <details>
+          <summary>Meta bautismal (mensual)</summary>
+          <div id="goalsEditor" class="stack"></div>
+        </details>
+
+        <details>
+          <summary>Fechas actuales</summary>
+          <div id="datesEditor" class="stack"></div>
+          <button type="button" class="btn btn--ghost" id="addDate">+ Fecha</button>
+        </details>
+
+        <details>
+          <summary>Conversos por unidad</summary>
+          <div id="unitsEditor" class="stack"></div>
+          <button type="button" class="btn btn--ghost" id="addUnit">+ Unidad</button>
+        </details>
+
+        <details>
+          <summary>Resumen del distrito</summary>
+          <div id="summaryEditor" class="stack"></div>
+        </details>
+
+        <button type="button" class="btn btn--ghost" id="btnReset" style="margin-top:0.75rem;width:100%">
+          Restablecer ejemplo
+        </button>
+      </details>
+    </aside>
+
+    <main class="preview-wrap">
+      <div class="preview-toolbar">
+        <button type="button" class="btn btn--ghost" id="togglePanel">Ocultar editor</button>
+        <span class="muted" id="previewHint">Vista previa del informe</span>
+      </div>
+      <div id="report" class="report" aria-label="Informe de correlación"></div>
+    </main>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="lcr-map.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

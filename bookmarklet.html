@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bookmarklet LCR → Correlación</title>
+  <style>
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.5;
+      color: #14212b;
+    }
+    a.bookmarklet {
+      display: inline-block;
+      margin: 1rem 0;
+      padding: 0.85rem 1.2rem;
+      background: #0b5f6b;
+      color: white;
+      text-decoration: none;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    code, pre {
+      background: #f0f4f6;
+      border-radius: 8px;
+    }
+    pre { padding: 0.85rem; overflow: auto; font-size: 0.8rem; }
+    ol { padding-left: 1.2rem; }
+    .note { color: #5c6b76; }
+  </style>
+</head>
+<body>
+  <h1>Exportar desde LCR</h1>
+  <p>
+    Arrastrá este botón a la barra de favoritos. En la página del
+    <a href="https://lcr.churchofjesuschrist.org/mlt/report/create-a-report/custom-reports-details/89b9829a-b2ba-4a3b-a6e2-fdfc1f4400cd">informe personalizado de LCR</a>
+    (o uno similar), hacé clic en el favorito.
+  </p>
+  <p>
+    <a class="bookmarklet" id="bm" href="#">LCR → Correlación</a>
+  </p>
+  <ol>
+    <li>Abrí el informe personalizado en LCR (agrupado por unidad).</li>
+    <li>Hacé clic en el favorito <strong>LCR → Correlación</strong>.</li>
+    <li>Se descarga <code>lcr-export.json</code> (y se copia al portapapeles).</li>
+    <li>En la app, usá <strong>Importar LCR</strong> → pegar o elegir el archivo.</li>
+  </ol>
+  <p class="note">
+    La app debe estar sirviendo en <code>http://127.0.0.1:8765/</code>
+    (<code>python -m http.server 8765</code> dentro de esta carpeta).
+  </p>
+  <script>
+    fetch("lcr-bookmarklet.js")
+      .then((r) => r.text())
+      .then((code) => {
+        const href = "javascript:" + encodeURIComponent(code);
+        document.getElementById("bm").href = href;
+      });
+  </script>
+</body>
+</html>

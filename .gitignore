@@ -1,0 +1,8 @@
+_pdf_*.txt
+_import_csv*.py
+_parse_pdf_informe.py
+*.b64.txt
+inject-expr.js
+cdp-payload.json
+.DS_Store
+Thumbs.db
