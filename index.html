@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
 </head>
 <body>
   <div class="app">
@@ -22,6 +23,9 @@
         <div class="preview-toolbar__actions">
           <button type="button" class="btn btn--primary" id="btnDownload">Descargar PDF</button>
           <button type="button" class="btn btn--ghost" id="btnPrint">Imprimir</button>
+          <button type="button" class="btn btn--ghost" id="btnOpenCharts" aria-haspopup="dialog">
+            Gráficos
+          </button>
           <button type="button" class="btn btn--ghost" id="btnOpenConfig" aria-haspopup="dialog">
             Configuración
           </button>
@@ -30,6 +34,74 @@
       </div>
       <div id="report" class="report" aria-label="Informe de correlación"></div>
     </main>
+  </div>
+
+  <div class="modal" id="chartsModal" hidden>
+    <div class="modal__backdrop" data-close-charts></div>
+    <div
+      class="modal__dialog panel modal__dialog--wide"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chartsModalTitle"
+    >
+      <header class="modal__head">
+        <div>
+          <p class="eyebrow">Análisis</p>
+          <h2 id="chartsModalTitle">Gráficos</h2>
+        </div>
+        <button type="button" class="btn btn--ghost btn--tiny" id="btnCloseCharts" aria-label="Cerrar">
+          ✕
+        </button>
+      </header>
+
+      <div class="charts-layout">
+        <aside class="charts-controls">
+          <label class="field">
+            <span>Columna</span>
+            <select id="chartColumn"></select>
+          </label>
+
+          <div class="field">
+            <span>Ramas</span>
+            <div class="charts-units" id="chartUnits"></div>
+            <div class="panel__actions panel__actions--inline">
+              <button type="button" class="btn btn--tiny btn--ghost" id="chartUnitsAll">Todas</button>
+              <button type="button" class="btn btn--tiny btn--ghost" id="chartUnitsNone">Ninguna</button>
+            </div>
+          </div>
+
+          <label class="check">
+            <input type="checkbox" id="chartConsolidado" checked />
+            Incluir consolidado
+          </label>
+
+          <label class="field">
+            <span>Tipo de gráfico</span>
+            <select id="chartType">
+              <option value="auto">Automático (recomendado)</option>
+              <option value="bar">Barras</option>
+              <option value="doughnut">Dona / torta</option>
+            </select>
+          </label>
+
+          <p class="hint" id="chartReason"></p>
+
+          <div class="panel__actions panel__actions--inline">
+            <button type="button" class="btn btn--primary" id="btnChartRender">Actualizar</button>
+            <button type="button" class="btn btn--ghost" id="btnChartPng">PNG</button>
+            <button type="button" class="btn btn--ghost" id="btnChartPdf">PDF</button>
+            <button type="button" class="btn btn--ghost" id="btnChartCsv">CSV</button>
+          </div>
+          <p class="hint" id="chartStatus"></p>
+        </aside>
+
+        <div class="charts-stage">
+          <div class="charts-canvas-wrap">
+            <canvas id="chartCanvas" aria-label="Gráfico generado"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="modal" id="configModal" hidden>
@@ -150,6 +222,7 @@
 
   <script src="data.js"></script>
   <script src="lcr-map.js"></script>
+  <script src="charts.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -67,6 +67,59 @@ button, input, select, textarea { font: inherit; }
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
 
+.modal__dialog--wide {
+  width: min(1040px, 100%);
+}
+
+.charts-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.charts-controls {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.charts-units {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid #2b3d49;
+  border-radius: 10px;
+  background: #0f1b22;
+}
+
+.chart-unit-check {
+  margin: 0;
+}
+
+.charts-stage {
+  min-height: 360px;
+  background: #0f1b22;
+  border: 1px solid #2b3d49;
+  border-radius: 14px;
+  padding: 0.75rem;
+}
+
+.charts-canvas-wrap {
+  position: relative;
+  height: min(58vh, 520px);
+}
+
+@media (max-width: 860px) {
+  .charts-layout {
+    grid-template-columns: 1fr;
+  }
+  .charts-canvas-wrap {
+    height: 360px;
+  }
+}
+
 .modal__head {
   display: flex;
   align-items: flex-start;
@@ -645,6 +698,7 @@ summary {
 @media print {
   body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .modal,
+  #chartsModal,
   .preview-toolbar,
   .no-print,
   .th-filter,
