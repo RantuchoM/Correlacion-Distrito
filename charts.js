@@ -95,8 +95,8 @@
       }
       return {
         type: "bar",
-        reason: "Barras agrupadas: cada opción se compara entre ramas (sin apilar consolidado).",
-        grouped: true,
+        reason: "Cada rama es una barra al 100%; los cortes son el % de cada opción.",
+        percentStacked: true,
       };
     }
     if (kind === "numeric") {
@@ -136,9 +136,9 @@
         type: "bar",
         reason: single
           ? "Conteo de bautismos por mes en la selección."
-          : "Barras agrupadas: bautismos por mes, comparando ramas.",
+          : "Cada rama es una barra al 100%; los cortes son el % por mes.",
         timeline: true,
-        grouped: !single,
+        percentStacked: !single,
       };
     }
     return { type: "bar", reason: "Barras como vista general." };
@@ -199,9 +199,11 @@
       unitCount: consolidado ? 1 : selected.length,
       consolidado: !!consolidado,
     });
-    const type = chartType || rec.type;
+    let type = chartType || rec.type;
     // Nunca apilar consolidado con ramas: o vista consolidada (1 serie) o comparación por ramas.
-    const stacked = false;
+    let stacked = false;
+    let percentStacked = false;
+    let showValues = false;
 
     let groups;
     if (consolidado) {
@@ -279,16 +281,38 @@
             .slice(0, 12)
             .map(([k]) => k);
         }
-        // Barras agrupadas por opción: cada rama es una serie (no se mezcla consolidado).
-        datasets = perGroup.map((pg, i) => ({
-          label: pg.group.label,
-          data: labels.map((lab) => pg.counted.get(lab) || 0),
-          backgroundColor: COLORS[i % COLORS.length],
-        }));
-        tableRows = labels.map((lab) => [
-          lab,
-          ...perGroup.map((pg) => pg.counted.get(lab) || 0),
-        ]);
+        // Eje X = ramas; cada barra = 100%; datasets = opciones (cortes %).
+        const cats = labels;
+        labels = perGroup.map((pg) => pg.group.label);
+        const totals = perGroup.map((pg) =>
+          Math.max(
+            1,
+            cats.reduce((s, lab) => s + (pg.counted.get(lab) || 0), 0)
+          )
+        );
+        datasets = cats.map((cat, i) => {
+          const counts = perGroup.map((pg) => pg.counted.get(cat) || 0);
+          const pcts = counts.map((n, gi) =>
+            Math.round((n / totals[gi]) * 1000) / 10
+          );
+          return {
+            label: cat,
+            data: pcts,
+            counts,
+            backgroundColor: COLORS[i % COLORS.length],
+            stack: "pct",
+          };
+        });
+        stacked = true;
+        percentStacked = true;
+        showValues = true;
+        tableRows = perGroup.flatMap((pg, gi) =>
+          cats.map((cat) => {
+            const n = pg.counted.get(cat) || 0;
+            const pct = Math.round((n / totals[gi]) * 1000) / 10;
+            return [pg.group.label, cat, n, `${pct}%`];
+          })
+        );
       }
     } else if (col.kind === "numeric") {
       if (groups.length === 1 && (rec.histogram || type === "bar" || type === "doughnut")) {
@@ -375,18 +399,56 @@
         );
         return { group: g, counted: new Map(countBy(values)) };
       });
-      const months = new Set();
-      monthMaps.forEach((mm) => mm.counted.forEach((_, k) => months.add(k)));
-      labels = [...months].sort();
-      datasets = monthMaps.map((mm, i) => ({
-        label: mm.group.label,
-        data: labels.map((lab) => mm.counted.get(lab) || 0),
-        backgroundColor: COLORS[i % COLORS.length],
-      }));
-      tableRows = labels.map((lab) => [
-        lab,
-        ...monthMaps.map((mm) => mm.counted.get(lab) || 0),
-      ]);
+      const months = [...new Set(monthMaps.flatMap((mm) => [...mm.counted.keys()]))].sort();
+      if (groups.length > 1 && (rec.percentStacked || type === "bar")) {
+        labels = monthMaps.map((mm) => mm.group.label);
+        const totals = monthMaps.map((mm) =>
+          Math.max(
+            1,
+            months.reduce((s, m) => s + (mm.counted.get(m) || 0), 0)
+          )
+        );
+        datasets = months.map((month, i) => {
+          const counts = monthMaps.map((mm) => mm.counted.get(month) || 0);
+          const pcts = counts.map((n, gi) =>
+            Math.round((n / totals[gi]) * 1000) / 10
+          );
+          return {
+            label: month,
+            data: pcts,
+            counts,
+            backgroundColor: COLORS[i % COLORS.length],
+            stack: "pct",
+          };
+        });
+        stacked = true;
+        percentStacked = true;
+        showValues = true;
+        tableRows = monthMaps.flatMap((mm, gi) =>
+          months.map((month) => {
+            const n = mm.counted.get(month) || 0;
+            const pct = Math.round((n / totals[gi]) * 1000) / 10;
+            return [mm.group.label, month, n, `${pct}%`];
+          })
+        );
+      } else {
+        labels = months;
+        datasets = monthMaps.map((mm, i) => ({
+          label: mm.group.label,
+          data: labels.map((lab) => mm.counted.get(lab) || 0),
+          backgroundColor: COLORS[i % COLORS.length],
+        }));
+        tableRows = labels.map((lab) => [
+          lab,
+          ...monthMaps.map((mm) => mm.counted.get(lab) || 0),
+        ]);
+      }
+    }
+
+    if (percentStacked) type = "bar";
+    // Valores visibles también en histograma / conteo simple
+    if (!showValues && type === "bar" && datasets.length) {
+      showValues = true;
     }
 
     return {
@@ -395,11 +457,14 @@
       recommendedType: rec.type,
       type,
       stacked,
+      percentStacked,
+      showValues,
       labels,
       datasets,
       tableRows,
-      tableHeader:
-        col.kind === "count"
+      tableHeader: percentStacked
+        ? ["Rama", "Opción", "Cantidad", "%"]
+        : col.kind === "count"
           ? ["Serie", "Personas"]
           : col.kind === "numeric" && groups.length > 1
             ? ["Serie", "Edad promedio", "Con edad"]
@@ -412,6 +477,47 @@
       groups,
     };
   }
+
+  const valueLabelsPlugin = {
+    id: "correlacionValueLabels",
+    afterDatasetsDraw(chart) {
+      const spec = chart.$correlacionSpec;
+      if (!spec?.showValues) return;
+      const { ctx } = chart;
+      chart.data.datasets.forEach((dataset, di) => {
+        const meta = chart.getDatasetMeta(di);
+        if (meta.hidden) return;
+        meta.data.forEach((el, i) => {
+          const raw = dataset.data[i];
+          if (raw == null || Number(raw) === 0) return;
+          const count = dataset.counts?.[i];
+          let text;
+          if (spec.percentStacked) {
+            if (Number(raw) < 6) return;
+            text = count != null ? `${raw}%\n(${count})` : `${raw}%`;
+          } else {
+            text = String(raw);
+          }
+          const { x, y } = el.tooltipPosition();
+          const props = el.getProps(["base", "y", "height"], true);
+          const segH = Math.abs((props.base ?? y) - y);
+          if (spec.percentStacked && segH < 14) return;
+          ctx.save();
+          ctx.fillStyle = "#f4f8fa";
+          ctx.font = "600 11px DM Sans, system-ui, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.shadowColor = "rgba(0,0,0,0.45)";
+          ctx.shadowBlur = 2;
+          const lines = text.split("\n");
+          lines.forEach((line, li) => {
+            ctx.fillText(line, x, y + (li - (lines.length - 1) / 2) * 12);
+          });
+          ctx.restore();
+        });
+      });
+    },
+  };
 
   function destroyChart() {
     if (chartInstance) {
@@ -427,6 +533,7 @@
     destroyChart();
     lastSpec = spec;
     const stacked = !!spec.stacked;
+    const percentStacked = !!spec.percentStacked;
     chartInstance = new Chart(canvas.getContext("2d"), {
       type: spec.type === "doughnut" ? "doughnut" : "bar",
       data: {
@@ -443,17 +550,42 @@
             text: spec.title,
             font: { size: 15, weight: "600" },
           },
-          tooltip: { mode: "index", intersect: false },
+          tooltip: {
+            mode: "index",
+            intersect: false,
+            callbacks: {
+              label(ctx) {
+                const count = ctx.dataset.counts?.[ctx.dataIndex];
+                const v = ctx.parsed.y ?? ctx.parsed;
+                if (percentStacked) {
+                  return count != null
+                    ? `${ctx.dataset.label}: ${v}% (${count})`
+                    : `${ctx.dataset.label}: ${v}%`;
+                }
+                return `${ctx.dataset.label}: ${v}`;
+              },
+            },
+          },
         },
         scales:
           spec.type === "doughnut"
             ? {}
             : {
                 x: { stacked, ticks: { maxRotation: 45, minRotation: 0 } },
-                y: { stacked, beginAtZero: true, ticks: { precision: 0 } },
+                y: {
+                  stacked,
+                  beginAtZero: true,
+                  max: percentStacked ? 100 : undefined,
+                  ticks: {
+                    precision: 0,
+                    callback: percentStacked ? (v) => `${v}%` : undefined,
+                  },
+                },
               },
       },
+      plugins: [valueLabelsPlugin],
     });
+    chartInstance.$correlacionSpec = spec;
     return chartInstance;
   }
 
@@ -526,9 +658,9 @@
       .map((name, i) => {
         const id = `chartUnit_${i}`;
         const checked = picked.has(name) ? "checked" : "";
-        return `<label class="check chart-unit-check"><input type="checkbox" name="chartUnit" value="${escapeAttr(
+        return `<label class="chart-unit-check" for="${id}"><input type="checkbox" name="chartUnit" value="${escapeAttr(
           name
-        )}" id="${id}" ${checked} /> ${escapeHtml(shortUnit(name))}</label>`;
+        )}" id="${id}" ${checked} /><span>${escapeHtml(shortUnit(name))}</span></label>`;
       })
       .join("");
   }
