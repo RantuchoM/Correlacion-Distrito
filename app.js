@@ -1094,12 +1094,35 @@
       }
     });
 
-    document.getElementById("togglePanel").addEventListener("click", () => {
-      els.app.classList.toggle("panel-collapsed");
-      const collapsed = els.app.classList.contains("panel-collapsed");
-      document.getElementById("togglePanel").textContent = collapsed
-        ? "Mostrar editor"
-        : "Ocultar editor";
+    const configModal = document.getElementById("configModal");
+    const openConfigBtn = document.getElementById("btnOpenConfig");
+    const closeConfigBtn = document.getElementById("btnCloseConfig");
+
+    function openConfigModal() {
+      if (!configModal) return;
+      configModal.hidden = false;
+      document.body.classList.add("modal-open");
+      closeConfigBtn?.focus();
+    }
+
+    function closeConfigModal() {
+      if (!configModal) return;
+      configModal.hidden = true;
+      document.body.classList.remove("modal-open");
+      openConfigBtn?.focus();
+    }
+
+    openConfigBtn?.addEventListener("click", openConfigModal);
+    closeConfigBtn?.addEventListener("click", closeConfigModal);
+    configModal?.addEventListener("click", (e) => {
+      if (e.target instanceof HTMLElement && e.target.hasAttribute("data-close-modal")) {
+        closeConfigModal();
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && configModal && !configModal.hidden) {
+        closeConfigModal();
+      }
     });
 
     document.getElementById("btnReset").addEventListener("click", () => {
