@@ -74,30 +74,38 @@
   }
 
   function recommend(kind, { unitCount, consolidado }) {
+    // consolidado = una sola serie agregada; por ramas = comparar series
+    const single = consolidado || unitCount <= 1;
     if (kind === "count") {
       return {
         type: "bar",
-        reason: "Barras para comparar cantidad de personas entre ramas.",
+        reason: single
+          ? "Cantidad total de personas en la selección."
+          : "Barras para comparar cantidad de personas entre ramas.",
       };
     }
     if (kind === "category" || kind === "text") {
-      if (unitCount <= 1 && !consolidado) {
+      if (single) {
         return {
           type: "doughnut",
-          reason: "Dona para ver la composición de una sola rama.",
+          reason: consolidado
+            ? "Dona del consolidado: composición de todas las ramas elegidas juntas."
+            : "Dona para ver la composición de una sola rama.",
         };
       }
       return {
         type: "bar",
-        reason: "Barras apiladas para comparar categorías entre ramas.",
-        stacked: true,
+        reason: "Barras agrupadas: cada opción se compara entre ramas (sin apilar consolidado).",
+        grouped: true,
       };
     }
     if (kind === "numeric") {
-      if (unitCount <= 1 && !consolidado) {
+      if (single) {
         return {
           type: "bar",
-          reason: "Histograma de edades en la rama seleccionada.",
+          reason: consolidado
+            ? "Histograma de edades en el consolidado."
+            : "Histograma de edades en la rama seleccionada.",
           histogram: true,
         };
       }
@@ -108,10 +116,12 @@
       };
     }
     if (kind === "ratio") {
-      if (unitCount <= 1 && !consolidado) {
+      if (single) {
         return {
           type: "bar",
-          reason: "Distribución de asistencia en rangos (0%, parcial, ≥50%, 100%).",
+          reason: consolidado
+            ? "Distribución de asistencia en el consolidado."
+            : "Distribución de asistencia en rangos (0%, parcial, ≥50%, 100%).",
           buckets: true,
         };
       }
@@ -124,8 +134,11 @@
     if (kind === "date") {
       return {
         type: "bar",
-        reason: "Conteo de bautismos por mes (mejor para ver concentración temporal).",
+        reason: single
+          ? "Conteo de bautismos por mes en la selección."
+          : "Barras agrupadas: bautismos por mes, comparando ramas.",
         timeline: true,
+        grouped: !single,
       };
     }
     return { type: "bar", reason: "Barras como vista general." };
@@ -180,39 +193,41 @@
   }) {
     const col = colMeta(columnId);
     const selected = selectedUnits.filter(Boolean);
-    const unitCount = selected.length;
-    const rec = recommend(col.kind, { unitCount, consolidado });
+    const poolNames =
+      selected.length > 0 ? selected : (units || []).map((u) => u.name);
+    const rec = recommend(col.kind, {
+      unitCount: consolidado ? 1 : selected.length,
+      consolidado: !!consolidado,
+    });
     const type = chartType || rec.type;
-    const stacked = !!rec.stacked && type === "bar";
+    // Nunca apilar consolidado con ramas: o vista consolidada (1 serie) o comparación por ramas.
+    const stacked = false;
 
-    const groups = selected.map((name) => ({
-      key: name,
-      label: shortUnit(name),
-      rows: collectMembers(units, [name]),
-    }));
-
+    let groups;
     if (consolidado) {
-      groups.push({
-        key: "__all__",
-        label: "Consolidado",
-        rows: collectMembers(units, selected.length ? selected : (units || []).map((u) => u.name)),
-      });
+      groups = [
+        {
+          key: "__all__",
+          label: "Consolidado",
+          rows: collectMembers(units, poolNames),
+        },
+      ];
+    } else {
+      groups = selected.map((name) => ({
+        key: name,
+        label: shortUnit(name),
+        rows: collectMembers(units, [name]),
+      }));
     }
 
-    if (!groups.length && consolidado) {
-      groups.push({
-        key: "__all__",
-        label: "Consolidado",
-        rows: collectMembers(
-          units,
-          (units || []).map((u) => u.name)
-        ),
-      });
+    if (!groups.length) {
+      throw new Error("Elegí al menos una rama, o activá vista consolidada.");
     }
 
     const titleParts = [col.label];
-    if (groups.length === 1) titleParts.push(groups[0].label);
-    else if (groups.length > 1) titleParts.push(`${groups.length} series`);
+    if (consolidado) titleParts.push("Consolidado");
+    else if (groups.length === 1) titleParts.push(groups[0].label);
+    else titleParts.push(`${groups.length} ramas`);
     const title = titleParts.join(" · ");
 
     let labels = [];
@@ -264,11 +279,11 @@
             .slice(0, 12)
             .map(([k]) => k);
         }
+        // Barras agrupadas por opción: cada rama es una serie (no se mezcla consolidado).
         datasets = perGroup.map((pg, i) => ({
           label: pg.group.label,
           data: labels.map((lab) => pg.counted.get(lab) || 0),
           backgroundColor: COLORS[i % COLORS.length],
-          stack: stacked ? "s1" : undefined,
         }));
         tableRows = labels.map((lab) => [
           lab,
@@ -276,7 +291,7 @@
         ]);
       }
     } else if (col.kind === "numeric") {
-      if (groups.length === 1 && (rec.histogram || type === "bar")) {
+      if (groups.length === 1 && (rec.histogram || type === "bar" || type === "doughnut")) {
         const ages = groups[0].rows
           .map((r) => memberAge(r.member))
           .filter((n) => n != null);

@@ -1233,7 +1233,7 @@
       try {
         const selected = C.selectedUnitNames(chartUnits);
         if (!selected.length && !chartConsolidado?.checked) {
-          throw new Error("Elegí al menos una rama o consolidado.");
+          throw new Error("Elegí al menos una rama, o activá vista consolidada.");
         }
         const typeSel = chartType?.value || "auto";
         const spec = C.buildDataset({
