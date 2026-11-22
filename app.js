@@ -203,17 +203,79 @@
     }, delayMs);
   }
 
+  function normName(value) {
+    return String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLocaleLowerCase("es");
+  }
+
+  function indexMembersForMerge(units) {
+    const byUnitName = new Map();
+    const byName = new Map();
+    for (const unit of units || []) {
+      for (const member of unit.members || []) {
+        const nameKey = normName(member.name);
+        if (!nameKey) continue;
+        byUnitName.set(`${normName(unit.name)}::${nameKey}`, member);
+        byName.set(nameKey, member);
+      }
+    }
+    return { byUnitName, byName };
+  }
+
+  // Campos que el usuario edita a mano: se conservan al reimportar LCR/CSV.
+  const HAND_FIELDS = ["attendance", "assignment", "report", "dato"];
+
+  function mergeHandFieldsByName(previousUnits, nextReport) {
+    if (!previousUnits?.length || !nextReport?.units?.length) return nextReport;
+    const { byUnitName, byName } = indexMembersForMerge(previousUnits);
+    let kept = 0;
+
+    for (const unit of nextReport.units) {
+      for (const member of unit.members || []) {
+        const nameKey = normName(member.name);
+        if (!nameKey) continue;
+        const prev =
+          byUnitName.get(`${normName(unit.name)}::${nameKey}`) ||
+          byName.get(nameKey);
+        if (!prev) continue;
+
+        let touched = false;
+        for (const field of HAND_FIELDS) {
+          const incoming = String(member[field] ?? "").trim();
+          const previous = String(prev[field] ?? "").trim();
+          if (!incoming && previous) {
+            member[field] = prev[field];
+            touched = true;
+          }
+        }
+        if (touched) kept += 1;
+      }
+    }
+
+    nextReport._mergeMeta = { kept };
+    return nextReport;
+  }
+
   function applyLcrPayload(payload) {
     if (!payload || !payload.units) {
       throw new Error("JSON inválido: no hay unidades.");
     }
     const onlyConverts = document.getElementById("onlyConverts")?.checked !== false;
-    state = window.mapLcrExportToReport(payload, { onlyConverts });
+    const previousUnits = clone(state?.units || []);
+    let next = window.mapLcrExportToReport(payload, { onlyConverts });
+    next = mergeHandFieldsByName(previousUnits, next);
+    state = next;
     refresh();
     const total = state._lcrMeta?.total ?? 0;
+    const kept = state._mergeMeta?.kept || 0;
     setImportStatus(
       `Importado: ${state.units.length} unidades, ${total} personas` +
-        (onlyConverts ? " (solo conversos)." : ".")
+        (onlyConverts ? " (solo conversos)" : "") +
+        (kept ? ` · ${kept} filas conservaron datos previos` : "") +
+        "."
     );
     setStatus("Listo para descargar PDF.");
   }
@@ -316,9 +378,21 @@
   }
 
   function mergePayload(base, incoming) {
+    // Une unidades por nombre; los miembros se fusionan luego por persona en applyLcrPayload.
     const map = new Map((base.units || []).map((u) => [u.name, u]));
     for (const u of incoming.units || []) {
-      map.set(u.name, u);
+      const prev = map.get(u.name);
+      if (!prev) {
+        map.set(u.name, u);
+        continue;
+      }
+      const byName = new Map(
+        (prev.members || []).map((m) => [normName(m.name), m])
+      );
+      for (const m of u.members || []) {
+        byName.set(normName(m.name), m);
+      }
+      map.set(u.name, { ...u, members: [...byName.values()] });
     }
     return {
       ...incoming,
@@ -327,7 +401,7 @@
     };
   }
 
-  async function importFromText(text, { merge = false } = {}) {
+  async function importFromText(text, { merge = true } = {}) {
     const trimmed = text.trim();
     let payload;
     if (trimmed.startsWith("{")) {
@@ -335,30 +409,8 @@
     } else {
       payload = csvToPayload(trimmed);
     }
-    if (merge && state?.units?.length) {
-      const current = {
-        units: state.units.map((u) => ({
-          name: u.name,
-          members: (u.members || []).map((m) => ({
-            name: m.name,
-            unit: u.name,
-            age: m.age,
-            sex: m.sex,
-            priesthood: "",
-            callings: m.calling === "Sí" ? "x" : "",
-            isConvert: "Sí",
-            homeTeachers: "",
-            visitingTeachers: "",
-            templeDate: m.temple === "Sí" ? "x" : "",
-            confirmationDate: m.baptism || "",
-          })),
-        })),
-      };
-      // Better: keep last imported raw if available
-      payload = mergePayload(
-        window._lastLcrPayload || current,
-        payload
-      );
+    if (merge && window._lastLcrPayload?.units?.length) {
+      payload = mergePayload(window._lastLcrPayload, payload);
     }
     window._lastLcrPayload = payload;
     applyLcrPayload(payload);
@@ -498,7 +550,16 @@
               <td>${escapeHtml(m.baptism || "")}</td>
               <td>${escapeHtml(age)}</td>
               <td>${escapeHtml(sex)}</td>
-              <td>${m.attendance ? `<span class="status ${attendanceClass(m.attendance)}">${escapeHtml(m.attendance)}</span>` : ""}</td>
+              <td class="col-asistencia">
+                <input
+                  type="text"
+                  class="row-dato no-print"
+                  data-field="attendance"
+                  value="${escapeHtml(m.attendance || "")}"
+                  placeholder="Asist…"
+                />
+                <span class="dato-print only-print ${m.attendance ? attendanceClass(m.attendance) : ""}">${escapeHtml(m.attendance || "")}</span>
+              </td>
               <td>${statusChip(m.temple)}</td>
               <td>${statusChip(m.calling)}</td>
               <td class="col-asignacion">
@@ -658,6 +719,15 @@
           if (field === "dato") {
             const printEl = tr.querySelector(".dato-print");
             if (printEl) printEl.textContent = input.value;
+          }
+          if (field === "attendance") {
+            const printEl = input.closest("td")?.querySelector(".dato-print");
+            if (printEl) {
+              printEl.textContent = input.value;
+              printEl.className = `dato-print only-print ${
+                input.value ? attendanceClass(input.value) : ""
+              }`;
+            }
           }
         };
         input.addEventListener("click", (e) => e.stopPropagation());

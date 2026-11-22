@@ -610,6 +610,15 @@ summary {
   color: var(--ink);
 }
 
+.col-asistencia {
+  min-width: 5.5rem;
+}
+
+.col-asistencia .row-dato {
+  min-width: 4.5rem;
+  text-align: center;
+}
+
 .col-dato {
   min-width: 8rem;
 }
