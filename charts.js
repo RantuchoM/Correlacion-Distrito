@@ -316,7 +316,6 @@
           },
         ];
         tableRows = labels.map((l, i) => [l, avgs[i], counts[i]]);
-        // header override below via tableHeader
       }
     } else if (col.kind === "ratio") {
       if (groups.length === 1 && (rec.buckets || type === "bar")) {
