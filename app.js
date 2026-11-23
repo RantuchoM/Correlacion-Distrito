@@ -24,6 +24,12 @@
   let sheetsSaveTimer = null;
   let sheetsSaving = false;
   let suppressSheetsSave = false;
+  let accessCfg = window.CorrelacionSummary
+    ? window.CorrelacionSummary.loadAccess()
+    : null;
+  let session =
+    (window.CorrelacionSummary && window.CorrelacionSummary.loadSession()) ||
+    null;
 
   function clone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -34,13 +40,41 @@
       typeof location !== "undefined" &&
       (location.hash === "#from-lcr" ||
         new URLSearchParams(location.search).get("lcr") === "1");
+    let report;
     if (!forceLcr) {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
+        if (raw) report = JSON.parse(raw);
       } catch (_) {}
     }
-    return clone(window.DEFAULT_REPORT);
+    if (!report) report = clone(window.DEFAULT_REPORT);
+    if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(report);
+    return report;
+  }
+
+  function canEdit() {
+    return !!(session && session.canEdit);
+  }
+
+  function isRamaMode() {
+    return session?.mode === "rama" && !!session.rama;
+  }
+
+  function visibleSummaryUnits() {
+    const units = state.summaryUnits || [];
+    if (isRamaMode()) {
+      const S = window.CorrelacionSummary;
+      return units.filter((u) => S.normUnit(u) === S.normUnit(session.rama));
+    }
+    return units;
+  }
+
+  function visibleUnits() {
+    if (!isRamaMode()) return state.units || [];
+    const S = window.CorrelacionSummary;
+    return (state.units || []).filter(
+      (u) => S.normUnit(u.name) === S.normUnit(session.rama)
+    );
   }
 
   function saveState() {
@@ -462,10 +496,18 @@
     const previousUnits = clone(state?.units || []);
     let next = window.mapLcrExportToReport(payload, { onlyConverts });
     next = mergeHandFieldsByName(previousUnits, next);
-    // Conservar metas mensuales editadas al reimportar miembros
+    // Conservar metas mensuales y resumen (tildes / personas) al reimportar
     if (previousUnits?.length && state?.goals?.length) {
       next.goals = clone(state.goals);
     }
+    if (state?.summary) next.summary = clone(state.summary);
+    if (state?.summaryUnits?.length) {
+      // mantener columnas de resumen alineadas a unidades nuevas
+      next.summaryUnits = next.units.map((u) =>
+        String(u.name || "").replace(/^Rama\s+/i, "")
+      );
+    }
+    if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(next);
     recomputeBaptismsFromMembers(next);
     recomputeGoalDones(next);
     state = next;
@@ -786,8 +828,16 @@
       )
       .join("");
 
-    const unitPages = state.units
-      .map((unit, ui) => {
+    const S = window.CorrelacionSummary;
+    if (S) S.ensureSummary(state);
+    const year = state.years?.current ?? new Date().getFullYear();
+    const weeks6 = S ? S.lastNSundays(year, 6) : [];
+    const sumUnits = visibleSummaryUnits();
+    const editAttr = canEdit() ? "" : "disabled";
+
+    const unitPages = visibleUnits()
+      .map((unit) => {
+        const ui = (state.units || []).indexOf(unit);
         const rows = (unit.members || [])
           .map((m, mi) => {
             const age = m.age != null ? m.age : String(m.ageSex || "").replace(/\s*[HhMmVvFf]\s*$/, "").trim();
@@ -811,6 +861,7 @@
                   data-field="attendance"
                   value="${escapeHtml(m.attendance || "")}"
                   placeholder="Asist…"
+                  ${editAttr}
                 />
                 <span class="dato-print only-print ${m.attendance ? attendanceClass(m.attendance) : ""}">${escapeHtml(m.attendance || "")}</span>
               </td>
@@ -818,20 +869,20 @@
               <td>${statusChip(m.calling)}</td>
               <td class="col-asignacion">
                 <label class="tick no-print">
-                  <input type="checkbox" data-field="assignment" ${assignOn ? "checked" : ""} />
+                  <input type="checkbox" data-field="assignment" ${assignOn ? "checked" : ""} ${editAttr} />
                   <span>Hecho</span>
                 </label>
                 <span class="tick-print only-print">${assignOn ? "Sí" : ""}</span>
               </td>
               <td class="col-informe">
                 <label class="tick no-print">
-                  <input type="checkbox" data-field="report" ${reportOn ? "checked" : ""} />
+                  <input type="checkbox" data-field="report" ${reportOn ? "checked" : ""} ${editAttr} />
                   <span>Hecho</span>
                 </label>
                 <span class="tick-print only-print">${reportOn ? "Sí" : ""}</span>
               </td>
               <td class="col-dato">
-                <input type="text" class="row-dato no-print" data-field="dato" value="${escapeHtml(m.dato || "")}" placeholder="Dato…" />
+                <input type="text" class="row-dato no-print" data-field="dato" value="${escapeHtml(m.dato || "")}" placeholder="Dato…" ${editAttr} />
                 <span class="dato-print only-print">${escapeHtml(m.dato || "")}</span>
               </td>
             </tr>`;
@@ -865,14 +916,51 @@
       })
       .join("");
 
-    const summaryRows = state.summaryRows
-      .map((row) => {
-        const cells = (row.values || [])
-          .map((v) => `<td>${statusChip(v)}</td>`)
+    const meetingLabels = state.summary?.meetingLabels || S?.MEETING_LABELS || [];
+    const summaryMeetingRows = meetingLabels
+      .map((label) => {
+        const cells = sumUnits
+          .map((u) => {
+            const { done, total } = S.meetingScore(state.summary, label, u, weeks6);
+            const cls = S.meetingClass(done, total);
+            return `<td>
+              <button type="button" class="summary-chip ${cls}" data-summary-open="meeting" data-label="${escapeHtml(label)}" data-unit="${escapeHtml(u)}">${done}/${total}</button>
+              <span class="only-print">${done}/${total}</span>
+            </td>`;
+          })
           .join("");
-        return `<tr><td>${escapeHtml(row.label)}</td>${cells}</tr>`;
+        return `<tr><td>${escapeHtml(label)}</td>${cells}</tr>`;
       })
       .join("");
+
+    const summaryLeaderRow = (() => {
+      const cells = sumUnits
+        .map((u) => {
+          const cur = S.currentLeader(state.summary.leaders[u]);
+          const text = S.personLabel(cur);
+          return `<td>
+            <button type="button" class="summary-chip summary-chip--text" data-summary-open="leader" data-unit="${escapeHtml(u)}">${escapeHtml(text)}</button>
+            <span class="only-print">${escapeHtml(text)}</span>
+          </td>`;
+        })
+        .join("");
+      return `<tr><td>Líder de obra misional</td>${cells}</tr>`;
+    })();
+
+    const summaryMissionRow = (() => {
+      const cells = sumUnits
+        .map((u) => {
+          const n = S.activePeople(state.summary.missionaries[u]).length;
+          return `<td>
+            <button type="button" class="summary-chip" data-summary-open="missionaries" data-unit="${escapeHtml(u)}">${n}</button>
+            <span class="only-print">${n}</span>
+          </td>`;
+        })
+        .join("");
+      return `<tr><td>Misioneros de rama</td>${cells}</tr>`;
+    })();
+
+    const summaryRows = summaryMeetingRows + summaryLeaderRow + summaryMissionRow;
 
     els.report.innerHTML = `
       <section class="page page--cover">
@@ -928,13 +1016,14 @@
 
       <section class="page">
         <div class="page__body">
-          <h2 class="page__title">Resumen del distrito <span class="table-count muted"></span></h2>
+          <h2 class="page__title">${isRamaMode() ? `Resumen · ${escapeHtml(session.rama)}` : "Resumen del distrito"}</h2>
+          <p class="muted small no-print" style="margin:0 0 0.65rem">Reuniones: últimas 6 semanas (${escapeHtml(String(year))}). Tocá una celda para ver detalle${canEdit() ? " y editar" : " (solo lectura)"}.</p>
           <div class="table-scroll">
-            <table class="summary-table js-interactive-table">
+            <table class="summary-table">
               <thead>
                 <tr>
-                  ${sortHeader("Indicador")}
-                  ${state.summaryUnits.map((u) => sortHeader(u)).join("")}
+                  <th>Indicador</th>
+                  ${sumUnits.map((u) => `<th>${escapeHtml(u)}</th>`).join("")}
                 </tr>
               </thead>
               <tbody>${summaryRows}</tbody>
@@ -947,6 +1036,197 @@
     wireInteractiveTables(els.report);
     wireRowEditors(els.report);
     wireGoalEditors(els.report);
+    wireSummaryChips(els.report);
+    applyAccessChrome();
+  }
+
+  function wireSummaryChips(root) {
+    root.querySelectorAll("[data-summary-open]").forEach((btn) => {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        openSummaryDetail(btn.dataset.summaryOpen, btn.dataset.unit, btn.dataset.label);
+      });
+    });
+  }
+
+  function openSummaryDetail(kind, unit, label) {
+    const S = window.CorrelacionSummary;
+    if (!S) return;
+    S.ensureSummary(state);
+    const modal = document.getElementById("summaryModal");
+    const title = document.getElementById("summaryModalTitle");
+    const body = document.getElementById("summaryModalBody");
+    if (!modal || !body) return;
+    const year = state.years?.current ?? new Date().getFullYear();
+    const weeks6 = S.lastNSundays(year, 6);
+    const editable = canEdit();
+
+    if (kind === "meeting") {
+      title.textContent = `${label} · ${unit}`;
+      const map = state.summary.meetings[label]?.[unit] || {};
+      body.innerHTML = `
+        <p class="muted small">Últimas 6 semanas (el año completo queda guardado).</p>
+        <div class="summary-weeks">
+          ${weeks6
+            .map((w) => {
+              const id = `wk_${w}`;
+              const checked = map[w] ? "checked" : "";
+              return `<label class="check summary-week">
+                <input type="checkbox" data-week="${w}" id="${id}" ${checked} ${editable ? "" : "disabled"} />
+                ${escapeHtml(S.formatSundayLabel(w))}
+              </label>`;
+            })
+            .join("")}
+        </div>`;
+      body.querySelectorAll("input[data-week]").forEach((inp) => {
+        inp.addEventListener("change", () => {
+          if (!state.summary.meetings[label][unit]) state.summary.meetings[label][unit] = {};
+          state.summary.meetings[label][unit][inp.dataset.week] = inp.checked;
+          saveState();
+          renderReport();
+        });
+      });
+    } else if (kind === "leader") {
+      title.textContent = `Líder de obra misional · ${unit}`;
+      body.innerHTML = renderPeopleEditor("leaders", unit, { singleActive: true });
+      wirePeopleEditor(body, "leaders", unit);
+    } else if (kind === "missionaries") {
+      title.textContent = `Misioneros de rama · ${unit}`;
+      body.innerHTML = renderPeopleEditor("missionaries", unit, { singleActive: false });
+      wirePeopleEditor(body, "missionaries", unit);
+    }
+
+    modal.hidden = false;
+    document.body.classList.add("modal-open");
+  }
+
+  function renderPeopleEditor(bucket, unit, { singleActive }) {
+    const S = window.CorrelacionSummary;
+    const list = state.summary[bucket][unit] || [];
+    const editable = canEdit();
+    const active = S.activePeople(list);
+    const rows = list
+      .map((p, i) => {
+        const activeNow = !p.releasedAt;
+        return `<div class="person-row ${activeNow ? "person-row--active" : ""}">
+          <div class="row-edit row-edit--compact">
+            <input data-person="${i}" data-field="last" placeholder="Apellido" value="${escapeHtml(p.last || "")}" ${editable ? "" : "disabled"} />
+            <input data-person="${i}" data-field="first" placeholder="Nombre" value="${escapeHtml(p.first || "")}" ${editable ? "" : "disabled"} />
+          </div>
+          <div class="row-edit row-edit--compact">
+            <label class="field"><span>Llamamiento</span>
+              <input type="date" data-person="${i}" data-field="calledAt" value="${escapeHtml(p.calledAt || "")}" ${editable ? "" : "disabled"} />
+            </label>
+            <label class="field"><span>Relevo</span>
+              <input type="date" data-person="${i}" data-field="releasedAt" value="${escapeHtml(p.releasedAt || "")}" ${editable ? "" : "disabled"} />
+            </label>
+          </div>
+          ${activeNow ? `<p class="hint">Actual</p>` : `<p class="hint">Relevado</p>`}
+        </div>`;
+      })
+      .join("");
+    return `
+      <p class="muted small">${singleActive ? "Se muestra el actual en la tabla; el historial queda abajo." : `Activos: <strong>${active.length}</strong> (el número de la celda).`}</p>
+      <div class="people-list">${rows || "<p class='muted'>Sin personas cargadas.</p>"}</div>
+      ${
+        editable
+          ? `<button type="button" class="btn btn--primary" data-add-person>Agregar</button>`
+          : `<p class="hint">Modo solo lectura — usá Editar (PIN) para cambiar.</p>`
+      }`;
+  }
+
+  function wirePeopleEditor(body, bucket, unit) {
+    const commit = (i, field, value) => {
+      if (!canEdit()) return;
+      const list = state.summary[bucket][unit];
+      if (!list[i]) return;
+      list[i][field] = value || null;
+      if (field === "releasedAt" && value === "") list[i].releasedAt = null;
+      saveState();
+      renderReport();
+    };
+    body.querySelectorAll("[data-person]").forEach((inp) => {
+      const apply = () => commit(Number(inp.dataset.person), inp.dataset.field, inp.value);
+      inp.addEventListener("change", apply);
+      inp.addEventListener("blur", apply);
+    });
+    body.querySelector("[data-add-person]")?.addEventListener("click", () => {
+      if (!canEdit()) return;
+      const today = new Date().toISOString().slice(0, 10);
+      if (bucket === "leaders") {
+        const cur = window.CorrelacionSummary.currentLeader(state.summary.leaders[unit]);
+        if (cur && !cur.releasedAt) cur.releasedAt = today;
+      }
+      state.summary[bucket][unit].push({
+        last: "",
+        first: "",
+        calledAt: today,
+        releasedAt: null,
+      });
+      saveState();
+      openSummaryDetail(bucket === "leaders" ? "leader" : "missionaries", unit);
+    });
+  }
+
+  function closeSummaryModal() {
+    const modal = document.getElementById("summaryModal");
+    if (modal) modal.hidden = true;
+    document.body.classList.toggle(
+      "modal-open",
+      Boolean(
+        (document.getElementById("configModal") && !document.getElementById("configModal").hidden) ||
+          (document.getElementById("chartsModal") && !document.getElementById("chartsModal").hidden)
+      )
+    );
+  }
+
+  function applyAccessChrome() {
+    const main = document.getElementById("mainApp");
+    const gate = document.getElementById("accessGate");
+    const eyebrow = document.getElementById("accessEyebrow");
+    const btnEdit = document.getElementById("btnUnlockEdit");
+    const btnLock = document.getElementById("btnLockEdit");
+    const btnConfig = document.getElementById("btnOpenConfig");
+
+    if (!session) {
+      if (gate) gate.hidden = false;
+      if (main) main.hidden = true;
+      return;
+    }
+    if (gate) gate.hidden = true;
+    if (main) main.hidden = false;
+
+    if (eyebrow) {
+      eyebrow.textContent =
+        session.mode === "rama"
+          ? `Rama ${session.rama}${session.canEdit ? " · edición" : " · solo ver"}`
+          : `Distrito${session.canEdit ? " · edición" : " · solo ver"}`;
+    }
+    if (btnEdit) btnEdit.hidden = !!session.canEdit;
+    if (btnLock) btnLock.hidden = !session.canEdit;
+    if (btnConfig) btnConfig.hidden = !(session.mode === "district" && session.canEdit);
+
+    document.body.classList.toggle("access-readonly", !session.canEdit);
+    document.body.classList.toggle("access-rama", session.mode === "rama");
+  }
+
+  function enterSession(next) {
+    session = next;
+    window.CorrelacionSummary.saveSession(session);
+    applyAccessChrome();
+    refresh();
+  }
+
+  function renderAccessGateLinks() {
+    const box = document.getElementById("gateRamaLinks");
+    if (!box || !accessCfg) return;
+    box.innerHTML = Object.keys(accessCfg.ramas || {})
+      .map((rama) => {
+        const href = window.CorrelacionSummary.ramaViewLink(rama, accessCfg);
+        return `<a class="access-gate__link" href="${escapeHtml(href)}">${escapeHtml(rama)} <code>?v=${escapeHtml(accessCfg.ramas[rama].view)}</code></a>`;
+      })
+      .join("");
   }
 
   function wireGoalEditors(root) {
@@ -1288,33 +1568,46 @@
       })
       .join("");
 
-    const unitLabels = state.summaryUnits
+    if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(state);
+    const unitLabels = (state.summaryUnits || [])
       .map(
         (u, i) =>
           `<input data-path="summaryUnits.${i}" value="${escapeHtml(u)}" title="Columna ${i + 1}" />`
       )
       .join("");
-
     els.summaryEditor.innerHTML = `
       <div class="metric-card">
         <h4>Columnas (unidades)</h4>
+        <p class="muted small">Semanas y personas se editan tocando las celdas del informe.</p>
         <div class="row-edit row-edit--summary">${unitLabels}</div>
-      </div>
-      ${state.summaryRows
-        .map(
-          (row, i) => `<div class="metric-card">
-            <input data-path="summaryRows.${i}.label" value="${escapeHtml(row.label)}" />
-            <div class="row-edit row-edit--summary" style="margin-top:0.4rem">
-              ${(row.values || [])
-                .map(
-                  (v, vi) =>
-                    `<input data-path="summaryRows.${i}.values.${vi}" value="${escapeHtml(v)}" />`
-                )
-                .join("")}
-            </div>
-          </div>`
-        )
-        .join("")}`;
+      </div>`;
+
+    const accessEditor = document.getElementById("accessEditor");
+    if (accessEditor && accessCfg) {
+      const ramas = Object.keys(accessCfg.ramas || {});
+      accessEditor.innerHTML = `
+        <label class="field"><span>Clave distrito (ver)</span>
+          <input id="accessDistrictView" value="${escapeHtml(accessCfg.districtView || "")}" />
+        </label>
+        <label class="field"><span>PIN distrito (editar)</span>
+          <input id="accessDistrictPin" value="${escapeHtml(accessCfg.districtPin || "")}" />
+        </label>
+        <p class="hint">Link distrito: <code class="break-all">${escapeHtml(window.CorrelacionSummary.districtViewLink(accessCfg))}</code></p>
+        ${ramas
+          .map((rama) => {
+            const cfg = accessCfg.ramas[rama];
+            return `<div class="metric-card">
+              <h4>${escapeHtml(rama)}</h4>
+              <div class="row-edit row-edit--compact">
+                <input data-access-rama="${escapeHtml(rama)}" data-access-field="view" value="${escapeHtml(cfg.view || "")}" title="Token ver" />
+                <input data-access-rama="${escapeHtml(rama)}" data-access-field="pin" value="${escapeHtml(cfg.pin || "")}" title="PIN editar" />
+              </div>
+              <p class="hint break-all">${escapeHtml(window.CorrelacionSummary.ramaViewLink(rama, accessCfg))}</p>
+            </div>`;
+          })
+          .join("")}
+        <button type="button" class="btn btn--ghost" id="btnSaveAccess">Guardar acceso</button>`;
+    }
   }
 
   function setByPath(path, value) {
@@ -1639,6 +1932,11 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      const summaryModal = document.getElementById("summaryModal");
+      if (summaryModal && !summaryModal.hidden) {
+        closeSummaryModal();
+        return;
+      }
       if (chartsModal && !chartsModal.hidden) {
         closeChartsModal();
         return;
@@ -1646,9 +1944,76 @@
       if (configModal && !configModal.hidden) closeConfigModal();
     });
 
+    document.getElementById("btnCloseSummary")?.addEventListener("click", closeSummaryModal);
+    document.getElementById("summaryModal")?.addEventListener("click", (e) => {
+      if (e.target instanceof HTMLElement && e.target.hasAttribute("data-close-summary")) {
+        closeSummaryModal();
+      }
+    });
+
+    document.getElementById("btnGateDistrict")?.addEventListener("click", () => {
+      const token = String(document.getElementById("gateDistrictToken")?.value || "").trim();
+      const gateStatus = document.getElementById("gateStatus");
+      if (!accessCfg || token !== String(accessCfg.districtView || "")) {
+        if (gateStatus) gateStatus.textContent = "Clave de distrito incorrecta.";
+        return;
+      }
+      enterSession({ mode: "district", rama: null, canEdit: false, via: "gate" });
+      if (gateStatus) gateStatus.textContent = "";
+      setStatus("Vista distrito (solo lectura). Usá Editar (PIN) para cambiar datos.");
+    });
+
+    document.getElementById("btnUnlockEdit")?.addEventListener("click", () => {
+      if (!session) return;
+      const pin = prompt(
+        session.mode === "rama"
+          ? `PIN de edición · Rama ${session.rama}`
+          : "PIN de edición · Distrito"
+      );
+      if (pin == null) return;
+      const ok =
+        session.mode === "rama"
+          ? window.CorrelacionSummary.checkRamaPin(session.rama, pin, accessCfg)
+          : window.CorrelacionSummary.checkDistrictPin(pin, accessCfg);
+      if (!ok) {
+        alert("PIN incorrecto.");
+        return;
+      }
+      enterSession({ ...session, canEdit: true });
+      setStatus("Edición habilitada.");
+    });
+
+    document.getElementById("btnLockEdit")?.addEventListener("click", () => {
+      if (!session) return;
+      enterSession({ ...session, canEdit: false });
+      setStatus("Volviste a solo lectura.");
+    });
+
+    document.getElementById("panel")?.addEventListener("click", (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLElement)) return;
+      if (t.id === "btnSaveAccess") {
+        const view = String(document.getElementById("accessDistrictView")?.value || "").trim();
+        const pin = String(document.getElementById("accessDistrictPin")?.value || "").trim();
+        accessCfg.districtView = view || accessCfg.districtView;
+        accessCfg.districtPin = pin || accessCfg.districtPin;
+        document.querySelectorAll("[data-access-rama]").forEach((inp) => {
+          const rama = inp.getAttribute("data-access-rama");
+          const field = inp.getAttribute("data-access-field");
+          if (!accessCfg.ramas[rama]) accessCfg.ramas[rama] = { view: "", pin: "" };
+          accessCfg.ramas[rama][field] = String(inp.value || "").trim();
+        });
+        window.CorrelacionSummary.saveAccess(accessCfg);
+        renderEditors();
+        renderAccessGateLinks();
+        setStatus("Acceso guardado en este navegador.");
+      }
+    });
+
     document.getElementById("btnReset").addEventListener("click", () => {
       if (!confirm("¿Restablecer los datos de ejemplo?")) return;
       state = clone(window.DEFAULT_REPORT);
+      if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(state);
       refresh();
       setStatus("Datos de ejemplo restaurados.");
       setImportStatus("");
@@ -1919,6 +2284,39 @@
     }
   }
 
+  function bootAccess() {
+    if (!window.CorrelacionSummary) {
+      session = { mode: "district", rama: null, canEdit: true, via: "fallback" };
+      return;
+    }
+    accessCfg = window.CorrelacionSummary.loadAccess();
+    const fromUrl = window.CorrelacionSummary.resolveAccessFromUrl(accessCfg);
+    if (fromUrl) {
+      const prev = window.CorrelacionSummary.loadSession();
+      if (
+        prev &&
+        prev.mode === fromUrl.mode &&
+        prev.rama === fromUrl.rama &&
+        prev.canEdit
+      ) {
+        fromUrl.canEdit = true;
+      }
+      session = fromUrl;
+      window.CorrelacionSummary.saveSession(session);
+      return;
+    }
+    const prev = window.CorrelacionSummary.loadSession();
+    if (prev?.mode === "district") {
+      session = prev;
+      return;
+    }
+    session = null;
+    window.CorrelacionSummary.saveSession(null);
+  }
+
+  bootAccess();
   bind();
-  refresh();
+  renderAccessGateLinks();
+  applyAccessChrome();
+  if (session) refresh();
 })();

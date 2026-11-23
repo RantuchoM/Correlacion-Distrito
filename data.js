@@ -139,13 +139,32 @@ window.DEFAULT_REPORT = {
       ]
     }
   ],
-  summaryRows: [
-    { label: "Consejo de rama", values: ["Sí", "Sí", "No", "Sí"] },
-    { label: "Correlación", values: ["No", "No", "Sí", "A veces"] },
-    { label: "Encuentro breve", values: ["A veces", "No", "A veces", "No"] },
-    { label: "Fundamentos del Evangelio", values: ["Sí", "No", "No", "No"] },
-    { label: "Líder de obra misional", values: ["No", "No", "Sí", "No"] },
-    { label: "Misioneros de rama", values: ["3", "0", "0", "2"] }
-  ],
-  summaryUnits: ["América", "Viedma", "Patagones", "San Antonio Oeste"]
+  summaryUnits: ["América", "Viedma", "Carmen de Patagones", "San Antonio Oeste"],
+  summaryRows: [],
+  summary: {
+    meetingLabels: [
+      "Consejo de rama",
+      "Correlación",
+      "Encuentro breve",
+      "Fundamentos del Evangelio"
+    ],
+    meetings: {
+      "Consejo de rama": { América: {}, Viedma: {}, "Carmen de Patagones": {}, "San Antonio Oeste": {} },
+      Correlación: { América: {}, Viedma: {}, "Carmen de Patagones": {}, "San Antonio Oeste": {} },
+      "Encuentro breve": { América: {}, Viedma: {}, "Carmen de Patagones": {}, "San Antonio Oeste": {} },
+      "Fundamentos del Evangelio": { América: {}, Viedma: {}, "Carmen de Patagones": {}, "San Antonio Oeste": {} }
+    },
+    leaders: {
+      América: [],
+      Viedma: [],
+      "Carmen de Patagones": [],
+      "San Antonio Oeste": []
+    },
+    missionaries: {
+      América: [],
+      Viedma: [],
+      "Carmen de Patagones": [],
+      "San Antonio Oeste": []
+    }
+  }
 };

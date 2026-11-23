@@ -14,13 +14,36 @@
 </head>
 <body>
   <div class="app">
-    <main class="preview-wrap">
+    <div class="access-gate no-print" id="accessGate" hidden>
+      <div class="access-gate__card panel">
+        <p class="eyebrow">Distrito Viedma</p>
+        <h1>Acceso al informe</h1>
+        <p class="muted small">
+          Sin link o clave de distrito no se abre la vista general. Cada rama tiene su link de solo lectura; el PIN habilita edición.
+        </p>
+        <label class="field">
+          <span>Clave corta de distrito (ver)</span>
+          <input id="gateDistrictToken" type="text" autocomplete="off" placeholder="ej. dv1" />
+        </label>
+        <div class="panel__actions panel__actions--inline">
+          <button type="button" class="btn btn--primary" id="btnGateDistrict">Entrar como distrito</button>
+        </div>
+        <p class="hint" id="gateStatus"></p>
+        <hr class="access-gate__hr" />
+        <p class="muted small">Links de rama (solo ver) — copiá desde Configuración → Acceso.</p>
+        <div id="gateRamaLinks" class="access-gate__links"></div>
+      </div>
+    </div>
+
+    <main class="preview-wrap" id="mainApp" hidden>
       <div class="preview-toolbar no-print">
         <div class="preview-toolbar__brand">
-          <p class="eyebrow">Distrito Viedma</p>
+          <p class="eyebrow" id="accessEyebrow">Distrito Viedma</p>
           <strong class="preview-toolbar__title">Correlación</strong>
         </div>
         <div class="preview-toolbar__actions">
+          <button type="button" class="btn btn--ghost" id="btnUnlockEdit" hidden>Editar (PIN)</button>
+          <button type="button" class="btn btn--ghost" id="btnLockEdit" hidden>Solo lectura</button>
           <button type="button" class="btn btn--primary" id="btnDownload">Descargar PDF</button>
           <button type="button" class="btn btn--ghost" id="btnPrint">Imprimir</button>
           <button type="button" class="btn btn--ghost" id="btnOpenCharts" aria-haspopup="dialog">
@@ -34,6 +57,20 @@
       </div>
       <div id="report" class="report" aria-label="Informe de correlación"></div>
     </main>
+  </div>
+
+  <div class="modal" id="summaryModal" hidden>
+    <div class="modal__backdrop" data-close-summary></div>
+    <div class="modal__dialog panel" role="dialog" aria-modal="true" aria-labelledby="summaryModalTitle">
+      <header class="modal__head">
+        <div>
+          <p class="eyebrow">Resumen</p>
+          <h2 id="summaryModalTitle">Detalle</h2>
+        </div>
+        <button type="button" class="btn btn--ghost btn--tiny" id="btnCloseSummary" aria-label="Cerrar">✕</button>
+      </header>
+      <div id="summaryModalBody" class="summary-modal-body"></div>
+    </div>
   </div>
 
   <div class="modal" id="chartsModal" hidden>
@@ -220,7 +257,18 @@
 
         <details>
           <summary>Resumen del distrito</summary>
+          <p class="muted small">
+            Las 4 reuniones se tildan por semana en el informe. Líder y misioneros se cargan por nombre (con fechas) desde las celdas.
+          </p>
           <div id="summaryEditor" class="stack"></div>
+        </details>
+
+        <details id="accessBox">
+          <summary>Acceso (links y PIN)</summary>
+          <p class="muted small">
+            Tokens cortos a propósito. Link de rama = ver. PIN = editar. Distrito usa otra clave; borrar el ?rama= no abre el general.
+          </p>
+          <div id="accessEditor" class="stack"></div>
         </details>
 
         <button type="button" class="btn btn--ghost" id="btnReset" style="margin-top:0.75rem;width:100%">
@@ -232,6 +280,7 @@
 
   <script src="data.js"></script>
   <script src="lcr-map.js"></script>
+  <script src="summary.js"></script>
   <script src="charts.js"></script>
   <script src="app.js"></script>
 </body>

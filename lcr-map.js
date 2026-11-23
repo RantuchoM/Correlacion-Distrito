@@ -110,12 +110,11 @@ window.mapLcrExportToReport = function mapLcrExportToReport(payload, options = {
   base.summaryUnits = base.units.map((u) => u.name.replace(/^Rama\s+/i, ""));
   while (base.summaryUnits.length < 4) base.summaryUnits.push("—");
   base.summaryUnits = base.summaryUnits.slice(0, 4);
-  base.summaryRows = base.summaryRows.map((row) => ({
-    label: row.label,
-    values: base.summaryUnits.map(() =>
-      row.label === "Misioneros de rama" ? "0" : "Pendiente"
-    ),
-  }));
+  // summary (reuniones/personas) se fusiona en app.js para no perder tildes/nombres
+  base.summaryRows = [];
+  if (window.CorrelacionSummary) {
+    window.CorrelacionSummary.ensureSummary(base);
+  }
 
   base.upcoming = [];
   base._lcrMeta = {
