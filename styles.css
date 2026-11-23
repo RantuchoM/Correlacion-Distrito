@@ -127,6 +127,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 .charts-stage {
+  position: relative;
   min-height: 360px;
   background: #0f1b22;
   border: 1px solid #2b3d49;
@@ -137,6 +138,62 @@ button, input, select, textarea { font: inherit; }
 .charts-canvas-wrap {
   position: relative;
   height: min(58vh, 520px);
+}
+
+.chart-people {
+  position: absolute;
+  right: 0.85rem;
+  top: 0.85rem;
+  bottom: 0.85rem;
+  width: min(280px, calc(100% - 1.5rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 0.8rem;
+  background: rgba(15, 27, 34, 0.96);
+  border: 1px solid #3a5361;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  z-index: 2;
+}
+
+.chart-people[hidden] {
+  display: none !important;
+}
+
+.chart-people__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.chart-people__head h3 {
+  margin: 0.1rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #eef5f8;
+  line-height: 1.25;
+}
+
+.chart-people__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  font-size: 0.88rem;
+}
+
+.chart-people__list li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #243742;
+  color: #d5e3ea;
+}
+
+.chart-people__list li:last-child {
+  border-bottom: 0;
 }
 
 @media (max-width: 860px) {

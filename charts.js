@@ -61,6 +61,20 @@
     return v;
   }
 
+  function personName(m) {
+    return String(m?.name || "").trim() || "—";
+  }
+
+  function peopleOf(rows, predicate) {
+    return (rows || [])
+      .filter(predicate)
+      .map((r) => ({
+        name: personName(r.member),
+        unit: shortUnit(r.unit),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  }
+
   function collectMembers(units, selectedNames) {
     const set = new Set(selectedNames);
     const rows = [];
@@ -71,6 +85,12 @@
       }
     }
     return rows;
+  }
+
+  function ageBinLabel(age, binSize = 5) {
+    if (age == null) return null;
+    const start = Math.floor(age / binSize) * binSize;
+    return `${start}-${start + binSize - 1}`;
   }
 
   function recommend(kind, { unitCount, consolidado }) {
@@ -239,10 +259,12 @@
     if (col.kind === "count") {
       labels = groups.map((g) => g.label);
       const data = groups.map((g) => g.rows.length);
+      const memberLists = groups.map((g) => peopleOf(g.rows, () => true));
       datasets = [
         {
           label: "Personas",
           data,
+          memberLists,
           backgroundColor: labels.map((_, i) => COLORS[i % COLORS.length]),
         },
       ];
@@ -255,10 +277,17 @@
         const counted = countBy(values).slice(0, col.kind === "text" ? 12 : 20);
         labels = counted.map(([k]) => k);
         const data = counted.map(([, n]) => n);
+        const memberLists = labels.map((lab) =>
+          peopleOf(
+            groups[0].rows,
+            (r) => categoryLabel(r.member[col.id], col.id) === lab
+          )
+        );
         datasets = [
           {
             label: groups[0].label,
             data,
+            memberLists,
             backgroundColor: labels.map((_, i) => COLORS[i % COLORS.length]),
           },
         ];
@@ -295,10 +324,17 @@
           const pcts = counts.map((n, gi) =>
             Math.round((n / totals[gi]) * 1000) / 10
           );
+          const memberLists = perGroup.map((pg) =>
+            peopleOf(
+              pg.group.rows,
+              (r) => categoryLabel(r.member[col.id], col.id) === cat
+            )
+          );
           return {
             label: cat,
             data: pcts,
             counts,
+            memberLists,
             backgroundColor: COLORS[i % COLORS.length],
             stack: "pct",
           };
@@ -322,10 +358,14 @@
         const bins = histogram(ages, 5);
         labels = bins.map(([k]) => k);
         const data = bins.map(([, n]) => n);
+        const memberLists = labels.map((lab) =>
+          peopleOf(groups[0].rows, (r) => ageBinLabel(memberAge(r.member)) === lab)
+        );
         datasets = [
           {
             label: `Edad · ${groups[0].label}`,
             data,
+            memberLists,
             backgroundColor: COLORS[0],
           },
         ];
@@ -339,18 +379,21 @@
           if (!ages.length) return 0;
           return Math.round((ages.reduce((a, b) => a + b, 0) / ages.length) * 10) / 10;
         });
-        const counts = groups.map((g) =>
-          g.rows.map((r) => memberAge(r.member)).filter((n) => n != null).length
+        const withAge = groups.map((g) =>
+          peopleOf(g.rows, (r) => memberAge(r.member) != null)
         );
+        const counts = withAge.map((list) => list.length);
         datasets = [
           {
             label: "Edad promedio",
             data: avgs,
+            memberLists: withAge,
             backgroundColor: COLORS[0],
           },
           {
             label: "Con edad cargada",
             data: counts,
+            memberLists: withAge,
             backgroundColor: COLORS[1],
           },
         ];
@@ -366,16 +409,26 @@
         }
         labels = buckets;
         const data = buckets.map((b) => counts[b]);
+        const memberLists = buckets.map((b) =>
+          peopleOf(
+            groups[0].rows,
+            (r) => attendanceBucket(parseAttendanceRatio(r.member.attendance)) === b
+          )
+        );
         datasets = [
           {
             label: groups[0].label,
             data,
+            memberLists,
             backgroundColor: COLORS.slice(0, buckets.length),
           },
         ];
         tableRows = buckets.map((b) => [b, counts[b]]);
       } else {
         labels = groups.map((g) => g.label);
+        const withAtt = groups.map((g) =>
+          peopleOf(g.rows, (r) => parseAttendanceRatio(r.member.attendance) != null)
+        );
         const avgs = groups.map((g) => {
           const ratios = g.rows
             .map((r) => parseAttendanceRatio(r.member.attendance))
@@ -387,6 +440,7 @@
           {
             label: "Asistencia promedio %",
             data: avgs,
+            memberLists: withAtt,
             backgroundColor: labels.map((_, i) => COLORS[i % COLORS.length]),
           },
         ];
@@ -413,10 +467,17 @@
           const pcts = counts.map((n, gi) =>
             Math.round((n / totals[gi]) * 1000) / 10
           );
+          const memberLists = monthMaps.map((mm) =>
+            peopleOf(
+              mm.group.rows,
+              (r) => monthKey(r.member.baptism, parseLooseDate) === month
+            )
+          );
           return {
             label: month,
             data: pcts,
             counts,
+            memberLists,
             backgroundColor: COLORS[i % COLORS.length],
             stack: "pct",
           };
@@ -436,6 +497,12 @@
         datasets = monthMaps.map((mm, i) => ({
           label: mm.group.label,
           data: labels.map((lab) => mm.counted.get(lab) || 0),
+          memberLists: labels.map((lab) =>
+            peopleOf(
+              mm.group.rows,
+              (r) => monthKey(r.member.baptism, parseLooseDate) === lab
+            )
+          ),
           backgroundColor: COLORS[i % COLORS.length],
         }));
         tableRows = labels.map((lab) => [
@@ -451,6 +518,11 @@
       showValues = true;
     }
 
+    // Copia fuera de datasets: Chart.js a veces no conserva props custom al clonar.
+    const memberMatrix = datasets.map((d) =>
+      (d.memberLists || []).map((list) => (list || []).slice())
+    );
+
     return {
       title,
       reason: rec.reason,
@@ -461,6 +533,7 @@
       showValues,
       labels,
       datasets,
+      memberMatrix,
       tableRows,
       tableHeader: percentStacked
         ? ["Rama", "Opción", "Cantidad", "%"]
@@ -526,7 +599,29 @@
     }
   }
 
-  function renderChart(canvas, spec) {
+  function segmentPeople(spec, datasetIndex, dataIndex) {
+    const ds = spec?.datasets?.[datasetIndex];
+    if (!ds) return null;
+    const people =
+      spec.memberMatrix?.[datasetIndex]?.[dataIndex] ||
+      ds.memberLists?.[dataIndex] ||
+      [];
+    const isDoughnut = spec.type === "doughnut";
+    const axisLabel = spec.labels?.[dataIndex] || "";
+    const seriesLabel = ds.label || "";
+    // Dona: labels = opciones; barras apiladas: labels = ramas, series = opción.
+    const option = isDoughnut ? axisLabel : seriesLabel;
+    const group = isDoughnut ? seriesLabel : axisLabel;
+    return {
+      group,
+      option,
+      column: spec.col?.label || "",
+      people,
+      count: people.length,
+    };
+  }
+
+  function renderChart(canvas, spec, { onPeopleSelect } = {}) {
     if (typeof Chart === "undefined") {
       throw new Error("Chart.js no cargó. Revisá la conexión.");
     }
@@ -534,8 +629,9 @@
     lastSpec = spec;
     const stacked = !!spec.stacked;
     const percentStacked = !!spec.percentStacked;
+    const isDoughnut = spec.type === "doughnut";
     chartInstance = new Chart(canvas.getContext("2d"), {
-      type: spec.type === "doughnut" ? "doughnut" : "bar",
+      type: isDoughnut ? "doughnut" : "bar",
       data: {
         labels: spec.labels,
         datasets: spec.datasets,
@@ -543,6 +639,19 @@
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onHover(evt, elements) {
+          const target = evt.native?.target;
+          if (target) target.style.cursor = elements.length ? "pointer" : "default";
+        },
+        onClick(_evt, elements) {
+          if (!onPeopleSelect) return;
+          if (!elements.length) {
+            onPeopleSelect(null);
+            return;
+          }
+          const { datasetIndex, index } = elements[0];
+          onPeopleSelect(segmentPeople(spec, datasetIndex, index));
+        },
         plugins: {
           legend: { position: "bottom" },
           title: {
@@ -551,8 +660,8 @@
             font: { size: 15, weight: "600" },
           },
           tooltip: {
-            mode: "index",
-            intersect: false,
+            mode: isDoughnut || percentStacked ? "nearest" : "index",
+            intersect: isDoughnut || percentStacked,
             callbacks: {
               label(ctx) {
                 const count = ctx.dataset.counts?.[ctx.dataIndex];
@@ -564,11 +673,19 @@
                 }
                 return `${ctx.dataset.label}: ${v}`;
               },
+              footer(items) {
+                if (!items.length) return "";
+                const n =
+                  items[0].dataset.memberLists?.[items[0].dataIndex]?.length ??
+                  spec.memberMatrix?.[items[0].datasetIndex]?.[items[0].dataIndex]
+                    ?.length;
+                return n != null ? "Clic para ver el listado" : "";
+              },
             },
           },
         },
         scales:
-          spec.type === "doughnut"
+          isDoughnut
             ? {}
             : {
                 x: { stacked, ticks: { maxRotation: 45, minRotation: 0 } },
@@ -699,6 +816,7 @@
     buildDataset,
     renderChart,
     destroyChart,
+    segmentPeople,
     exportPng,
     exportPdf,
     exportCsv,

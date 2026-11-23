@@ -1810,6 +1810,45 @@
       chartReason.textContent = rec.reason;
     }
 
+    function hideChartPeople() {
+      const panel = document.getElementById("chartPeoplePanel");
+      if (panel) panel.hidden = true;
+    }
+
+    function showChartPeople(payload) {
+      const panel = document.getElementById("chartPeoplePanel");
+      const titleEl = document.getElementById("chartPeopleTitle");
+      const metaEl = document.getElementById("chartPeopleMeta");
+      const listEl = document.getElementById("chartPeopleList");
+      const eyeEl = document.getElementById("chartPeopleEyebrow");
+      if (!panel || !listEl) return;
+      if (!payload) {
+        panel.hidden = true;
+        return;
+      }
+      const { group, option, column, people } = payload;
+      if (eyeEl) eyeEl.textContent = column || "Personas";
+      if (titleEl) {
+        titleEl.textContent =
+          group && option && group !== option ? `${group} · ${option}` : option || group || "Segmento";
+      }
+      if (metaEl) {
+        metaEl.textContent = `${people.length} persona${people.length === 1 ? "" : "s"}`;
+      }
+      listEl.innerHTML = people.length
+        ? people
+            .map((p) => {
+              const unit =
+                chartConsolidado?.checked || (group && group !== p.unit)
+                  ? ` <span class="muted">${escapeHtml(p.unit)}</span>`
+                  : "";
+              return `<li><strong>${escapeHtml(p.name)}</strong>${unit}</li>`;
+            })
+            .join("")
+        : `<li class="muted">Nadie en este segmento.</li>`;
+      panel.hidden = false;
+    }
+
     function renderSelectedChart() {
       const C = window.CorrelacionCharts;
       if (!C || !chartCanvas) return;
@@ -1827,9 +1866,12 @@
           chartType: typeSel === "auto" ? null : typeSel,
           parseLooseDate,
         });
-        if (chartReason) chartReason.textContent = spec.reason;
-        C.renderChart(chartCanvas, spec);
-        setChartStatus(`${spec.title} · listo para exportar.`);
+        if (chartReason) {
+          chartReason.textContent = `${spec.reason} Tocá un color para ver el listado.`;
+        }
+        hideChartPeople();
+        C.renderChart(chartCanvas, spec, { onPeopleSelect: showChartPeople });
+        setChartStatus(`${spec.title} · clic en un segmento para listar personas.`);
       } catch (err) {
         setChartStatus(err.message || String(err));
         console.error(err);
@@ -1898,6 +1940,7 @@
       updateChartReason();
       renderSelectedChart();
     });
+    document.getElementById("btnCloseChartPeople")?.addEventListener("click", hideChartPeople);
     document.getElementById("btnChartRender")?.addEventListener("click", renderSelectedChart);
     document.getElementById("btnChartPng")?.addEventListener("click", () => {
       try {
