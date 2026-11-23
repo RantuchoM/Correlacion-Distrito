@@ -797,7 +797,6 @@ span.att-0,
 span.att-low,
 span.att-mid,
 span.att-high {
-  display: inline-block;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
   font-weight: 700;
@@ -808,7 +807,7 @@ span.att-high {
   min-width: 8rem;
 }
 
-.only-print { display: none; }
+.only-print { display: none !important; }
 
 .js-interactive-table .th-filter:focus,
 .js-interactive-table .th-min:focus,
