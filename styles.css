@@ -374,10 +374,11 @@ summary {
 }
 
 .page--cover {
-  min-height: 420px;
+  min-height: 0;
   display: grid;
-  place-items: end start;
-  padding: 2.4rem;
+  align-items: center;
+  justify-items: start;
+  padding: 1.35rem 1.6rem;
   color: white;
   background:
     linear-gradient(120deg, rgba(8, 40, 48, 0.88), rgba(11, 95, 107, 0.55)),
@@ -389,33 +390,37 @@ summary {
 .page--cover::after {
   content: "";
   position: absolute;
-  inset: auto 8% 12% auto;
-  width: 140px;
-  height: 140px;
-  border: 2px solid rgba(255,255,255,0.25);
+  inset: auto 1.1rem 50% auto;
+  transform: translateY(50%);
+  width: 72px;
+  height: 72px;
+  border: 2px solid rgba(255,255,255,0.22);
   border-radius: 50%;
-  opacity: 0.7;
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .cover__kicker {
   margin: 0;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   opacity: 0.85;
 }
 
 .cover__title {
-  margin: 0.35rem 0 0;
+  margin: 0.2rem 0 0;
   font-family: Fraunces, Georgia, serif;
-  font-size: clamp(2.4rem, 5vw, 3.4rem);
-  line-height: 1.05;
+  font-size: clamp(1.75rem, 4.2vw, 2.55rem);
+  line-height: 1.08;
+  max-width: 18ch;
 }
 
 .cover__period {
-  margin: 0.5rem 0 0;
-  font-size: 1.35rem;
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
   font-weight: 500;
+  opacity: 0.95;
 }
 
 .page__body {
@@ -723,6 +728,132 @@ summary {
   }
 }
 
+@media (max-width: 720px) {
+  .preview-wrap {
+    padding: 0.65rem 0.65rem 1.5rem;
+  }
+
+  .preview-toolbar {
+    gap: 0.45rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .preview-toolbar__brand {
+    flex: 1 1 100%;
+  }
+
+  .preview-toolbar__actions {
+    width: 100%;
+  }
+
+  .preview-toolbar__actions .btn {
+    flex: 1 1 calc(50% - 0.3rem);
+    min-height: 2.55rem;
+    justify-content: center;
+  }
+
+  .preview-toolbar__status {
+    flex: 1 1 100%;
+    font-size: 0.8rem;
+  }
+
+  .report {
+    gap: 0.75rem;
+  }
+
+  .page--cover {
+    padding: 1rem 1.1rem;
+  }
+
+  .page--cover::after {
+    width: 52px;
+    height: 52px;
+    inset: auto 0.75rem 50% auto;
+  }
+
+  .cover__title {
+    font-size: clamp(1.55rem, 7vw, 2rem);
+    max-width: none;
+  }
+
+  .cover__period {
+    font-size: 0.95rem;
+  }
+
+  .page__body {
+    padding: 1rem 0.9rem 1.15rem;
+  }
+
+  .page__title {
+    font-size: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .table-scroll {
+    margin: 0 -0.15rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .members-table,
+  .stats-table,
+  .summary-table {
+    font-size: 0.8rem;
+  }
+
+  .members-table th,
+  .members-table td {
+    padding: 0.4rem 0.35rem;
+  }
+
+  .modal {
+    padding: 0.35rem;
+    align-items: stretch;
+  }
+
+  .modal__dialog,
+  .modal__dialog--wide {
+    width: 100%;
+    max-height: min(96vh, 100%);
+    border-radius: 14px;
+    padding: 0.85rem 0.85rem 1rem;
+  }
+
+  .charts-controls {
+    gap: 0.45rem;
+  }
+
+  .charts-units {
+    max-height: 9rem;
+  }
+
+  .charts-stage {
+    min-height: 280px;
+    padding: 0.5rem;
+  }
+
+  .charts-canvas-wrap {
+    height: min(48vh, 340px);
+  }
+
+  .panel__actions--inline .btn {
+    min-height: 2.4rem;
+  }
+
+  .field {
+    margin: 0.55rem 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .preview-toolbar__actions .btn {
+    flex: 1 1 100%;
+  }
+
+  .badge {
+    font-size: 0.76rem;
+  }
+}
+
 @media print {
   body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .modal,
@@ -749,6 +880,11 @@ summary {
     break-after: page;
     page-break-after: always;
     overflow: visible !important;
+  }
+  .page--cover {
+    min-height: 0 !important;
+    padding: 1.1rem 1.25rem !important;
+    align-items: center !important;
   }
   .page:last-child {
     break-after: auto;
