@@ -129,9 +129,10 @@
       <details open class="import-box">
         <summary>Importar desde LCR</summary>
         <p class="muted small">
-          Cargá un CSV/JSON exportado de LCR. En GitHub Pages los datos viven en
-          <code>lcr-export.json</code> / <code>tabla_exportada.csv</code> del repo:
-          para actualizar, subí el archivo nuevo y hacé push.
+          Cargá un CSV/JSON de miembros, o la asistencia de Progress Record
+          (<a href="bookmarklet.html" target="_blank" rel="noopener">bookmarklets</a>).
+          En Pages los datos base viven en <code>lcr-export.json</code> /
+          <code>tabla_exportada.csv</code>.
         </p>
         <label class="check">
           <input type="checkbox" id="onlyConverts" checked />
@@ -139,6 +140,9 @@
         </label>
         <div class="panel__actions panel__actions--inline">
           <button type="button" class="btn btn--primary" id="btnPasteLcr">Pegar JSON</button>
+          <button type="button" class="btn btn--ghost" id="btnPasteAttendance">
+            Pegar asistencia
+          </button>
           <label class="btn btn--ghost file-btn">
             Elegir CSV/JSON
             <input type="file" id="lcrFile" accept=".csv,.json,text/csv,application/json" hidden />

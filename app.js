@@ -211,6 +211,13 @@
       .toLocaleLowerCase("es");
   }
 
+  /** Clave estable para "Apellido, Nombre" vs "Nombre Apellido". */
+  function nameMatchKey(value) {
+    const n = normName(value).replace(/,/g, " ");
+    const tokens = n.split(/\s+/).filter(Boolean).sort();
+    return tokens.join(" ");
+  }
+
   function indexMembersForMerge(units) {
     const byUnitName = new Map();
     const byName = new Map();
@@ -223,6 +230,83 @@
       }
     }
     return { byUnitName, byName };
+  }
+
+  function indexMembersByMatchKey(units) {
+    const byUnitKey = new Map();
+    const byKey = new Map();
+    for (const unit of units || []) {
+      for (const member of unit.members || []) {
+        const key = nameMatchKey(member.name);
+        if (!key) continue;
+        byUnitKey.set(`${normName(unit.name)}::${key}`, member);
+        byKey.set(key, member);
+      }
+    }
+    return { byUnitKey, byKey };
+  }
+
+  function isAttendancePayload(payload) {
+    return (
+      payload &&
+      (payload.kind === "attendance" ||
+        payload.source === "lcr-progress-attendance")
+    );
+  }
+
+  /**
+   * Aplica solo asistencia (Progress Record) sobre el informe actual,
+   * emparejando por rama + nombre (tolera orden apellido/nombre).
+   */
+  function applyAttendanceOverlay(payload) {
+    if (!isAttendancePayload(payload)) {
+      throw new Error("JSON inválido: no es un export de asistencia.");
+    }
+    if (!state?.units?.length) {
+      throw new Error(
+        "No hay informe cargado. Importá primero el CSV/JSON de miembros y después la asistencia."
+      );
+    }
+
+    const { byUnitKey, byKey } = indexMembersByMatchKey(state.units);
+    let matched = 0;
+    let updated = 0;
+    const unmatched = [];
+
+    for (const unit of payload.units || []) {
+      for (const incoming of unit.members || []) {
+        const key = nameMatchKey(incoming.name);
+        if (!key) continue;
+        const att = String(incoming.attendance || "").trim();
+        if (!att) continue;
+        const target =
+          byUnitKey.get(`${normName(unit.name)}::${key}`) || byKey.get(key);
+        if (!target) {
+          unmatched.push(`${unit.name}: ${incoming.name}`);
+          continue;
+        }
+        matched += 1;
+        if (String(target.attendance || "").trim() !== att) {
+          target.attendance = att;
+          updated += 1;
+        }
+      }
+    }
+
+    refresh();
+    scheduleSheetsSave(600);
+    const missNote =
+      unmatched.length > 0
+        ? ` · ${unmatched.length} sin match` +
+          (unmatched.length <= 5 ? ` (${unmatched.join("; ")})` : "")
+        : "";
+    setImportStatus(
+      `Asistencia aplicada: ${updated} actualizados, ${matched} encontrados` +
+        missNote +
+        "."
+    );
+    setStatus("Asistencia de LCR fusionada.");
+    return { matched, updated, unmatched };
   }
 
   // Campos que el usuario edita a mano: se conservan al reimportar LCR/CSV.
@@ -409,11 +493,33 @@
     } else {
       payload = csvToPayload(trimmed);
     }
+    if (isAttendancePayload(payload)) {
+      applyAttendanceOverlay(payload);
+      return;
+    }
     if (merge && window._lastLcrPayload?.units?.length) {
       payload = mergePayload(window._lastLcrPayload, payload);
     }
     window._lastLcrPayload = payload;
     applyLcrPayload(payload);
+  }
+
+  async function importAttendanceFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text?.trim()) throw new Error("El portapapeles está vacío.");
+      await importFromText(text, { merge: false });
+    } catch (err) {
+      const manual = prompt(
+        "No se pudo leer el portapapeles. Pegá aquí el JSON de lcr-attendance.json:"
+      );
+      if (!manual) return;
+      try {
+        await importFromText(manual, { merge: false });
+      } catch (e) {
+        setImportStatus(e.message || "JSON de asistencia inválido.");
+      }
+    }
   }
 
   function statusClass(value) {
@@ -1424,9 +1530,18 @@
       loadFromSheets();
     });
 
+    document
+      .getElementById("btnPasteAttendance")
+      ?.addEventListener("click", () => importAttendanceFromClipboard());
+
     // Si venís del bookmarklet, intentar pegar automáticamente
     if (location.hash === "#from-lcr") {
       setImportStatus("Pegá el JSON (botón Pegar JSON) o elegí lcr-export.json.");
+    }
+    if (location.hash === "#from-lcr-attendance") {
+      setImportStatus("Leyendo asistencia del portapapeles…");
+      openConfigModal();
+      importAttendanceFromClipboard();
     }
 
     // Carga automática: Sheets (si está marcado) o archivos del sitio

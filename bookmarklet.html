@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bookmarklet LCR → Correlación</title>
+  <title>Bookmarklets LCR → Correlación</title>
   <style>
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
-      max-width: 720px;
+      max-width: 760px;
       margin: 2rem auto;
       padding: 0 1rem;
       line-height: 1.5;
@@ -15,7 +15,7 @@
     }
     a.bookmarklet {
       display: inline-block;
-      margin: 1rem 0;
+      margin: 0.75rem 0.5rem 0.75rem 0;
       padding: 0.85rem 1.2rem;
       background: #0b5f6b;
       color: white;
@@ -23,42 +23,84 @@
       border-radius: 999px;
       font-weight: 700;
     }
+    a.bookmarklet--alt { background: #c45c26; }
     code, pre {
       background: #f0f4f6;
       border-radius: 8px;
     }
-    pre { padding: 0.85rem; overflow: auto; font-size: 0.8rem; }
+    pre { padding: 0.85rem; overflow: auto; font-size: 0.75rem; max-height: 220px; }
     ol { padding-left: 1.2rem; }
     .note { color: #5c6b76; }
+    .card {
+      border: 1px solid #d7dee4;
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      margin: 1.25rem 0;
+      background: #fafcfd;
+    }
+    h2 { font-size: 1.15rem; margin: 0 0 0.5rem; }
   </style>
 </head>
 <body>
   <h1>Exportar desde LCR</h1>
-  <p>
-    Arrastrá este botón a la barra de favoritos. En la página del
-    <a href="https://lcr.churchofjesuschrist.org/mlt/report/create-a-report/custom-reports-details/89b9829a-b2ba-4a3b-a6e2-fdfc1f4400cd">informe personalizado de LCR</a>
-    (o uno similar), hacé clic en el favorito.
-  </p>
-  <p>
-    <a class="bookmarklet" id="bm" href="#">LCR → Correlación</a>
-  </p>
-  <ol>
-    <li>Abrí el informe personalizado en LCR (agrupado por unidad).</li>
-    <li>Hacé clic en el favorito <strong>LCR → Correlación</strong>.</li>
-    <li>Se descarga <code>lcr-export.json</code> (y se copia al portapapeles).</li>
-    <li>En la app, usá <strong>Importar LCR</strong> → pegar o elegir el archivo.</li>
-  </ol>
   <p class="note">
-    La app debe estar sirviendo en <code>http://127.0.0.1:8765/</code>
-    (<code>python -m http.server 8765</code> dentro de esta carpeta).
+    Arrastrá cada botón a la barra de favoritos de Chrome. Después abrí LCR y hacé clic en el favorito.
   </p>
+
+  <div class="card">
+    <h2>1. Asistencia (4 ramas juntas)</h2>
+    <p>
+      En
+      <a href="https://lcr.churchofjesuschrist.org/one-work/progress-record?lang=spa&tab=recentConverts">Progreso de la senda · Miembros nuevos</a>
+      (cualquier rama del distrito), usá este favorito. Lee las 4 ramas por API y arma ratios tipo <code>5/6</code>.
+    </p>
+    <p>
+      <a class="bookmarklet bookmarklet--alt" id="bmAtt" href="#">LCR asistencia → Correlación</a>
+    </p>
+    <ol>
+      <li>Abrí Progress Record en LCR (logueado).</li>
+      <li>Clic en <strong>LCR asistencia → Correlación</strong>.</li>
+      <li>Se descarga <code>lcr-attendance.json</code> y se copia al portapapeles.</li>
+      <li>En la app, se abre con <code>#from-lcr-attendance</code> y pega sola (o usá <strong>Pegar asistencia</strong>).</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>2. Informe personalizado (lista de miembros)</h2>
+    <p>
+      En el
+      <a href="https://lcr.churchofjesuschrist.org/mlt/report/create-a-report/custom-reports-details/89b9829a-b2ba-4a3b-a6e2-fdfc1f4400cd">informe personalizado</a>
+      (agrupado por unidad).
+    </p>
+    <p>
+      <a class="bookmarklet" id="bm" href="#">LCR → Correlación</a>
+    </p>
+  </div>
+
+  <p class="note">
+    App local: <code>http://127.0.0.1:8765/</code> · Pages:
+    <a href="https://rantuchom.github.io/Correlacion-Distrito/">rantuchom.github.io/Correlacion-Distrito</a>
+  </p>
+
+  <h2>Código crudo (si Chrome no deja arrastrar)</h2>
+  <p class="note">Favoritos → Agregar favorito → en URL pegá el contenido de abajo (empieza con <code>javascript:</code>).</p>
+  <p><strong>Asistencia</strong></p>
+  <pre id="rawAtt">Cargando…</pre>
+  <p><strong>Informe personalizado</strong></p>
+  <pre id="rawReport">Cargando…</pre>
+
   <script>
-    fetch("lcr-bookmarklet.js")
-      .then((r) => r.text())
-      .then((code) => {
-        const href = "javascript:" + encodeURIComponent(code);
-        document.getElementById("bm").href = href;
-      });
+    function wire(file, linkId, preId) {
+      return fetch(file)
+        .then((r) => r.text())
+        .then((code) => {
+          const href = "javascript:" + encodeURIComponent(code);
+          document.getElementById(linkId).href = href;
+          document.getElementById(preId).textContent = href;
+        });
+    }
+    wire("lcr-attendance-bookmarklet.js", "bmAtt", "rawAtt");
+    wire("lcr-bookmarklet.js", "bm", "rawReport");
   </script>
 </body>
 </html>
