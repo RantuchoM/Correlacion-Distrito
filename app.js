@@ -175,6 +175,7 @@
       }
       state = data.report;
       recomputeBaptismsFromMembers(state);
+      recomputeGoalDones(state);
       suppressSheetsSave = true;
       try {
         refresh();
@@ -376,6 +377,83 @@
     return report;
   }
 
+  const MONTH_NAMES = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre",
+  ];
+
+  function monthKey(name) {
+    const n = normName(name).slice(0, 3);
+    const idx = MONTH_NAMES.findIndex((m) => normName(m).startsWith(n));
+    return idx >= 0 ? idx : -1;
+  }
+
+  function monthYearFromBaptism(text) {
+    const ts = parseLooseDate(text);
+    if (ts == null) return null;
+    const d = new Date(ts);
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() };
+  }
+
+  /**
+   * Asegura 12 meses del año actual (para que el mes en curso y los futuros
+   * existan y se puedan editar las metas). Conserva goals ya cargados.
+   */
+  function ensureGoalsForCurrentYear(report = state) {
+    if (!report) return report;
+    const currY = report.years?.current ?? new Date().getFullYear();
+    const prevByIdx = new Map();
+    for (const g of report.goals || []) {
+      const idx = g.monthIndex != null ? Number(g.monthIndex) : monthKey(g.month);
+      if (idx < 0 || idx > 11) continue;
+      prevByIdx.set(idx, g);
+    }
+    report.goals = MONTH_NAMES.map((month, i) => {
+      const prev = prevByIdx.get(i);
+      const goalNum = prev?.goal;
+      return {
+        month,
+        monthIndex: i,
+        year: currY,
+        done: 0,
+        goal:
+          goalNum == null || goalNum === ""
+            ? 10
+            : Number(goalNum) || 0,
+      };
+    });
+    return report;
+  }
+
+  /** done = confirmaciones del mes (año del informe). */
+  function recomputeGoalDones(report = state) {
+    if (!report) return report;
+    ensureGoalsForCurrentYear(report);
+    const currY = report.years.current;
+    const counts = Array(12).fill(0);
+    for (const unit of report.units || []) {
+      for (const m of unit.members || []) {
+        const my = monthYearFromBaptism(m.baptism);
+        if (!my || my.year !== currY) continue;
+        counts[my.month] += 1;
+      }
+    }
+    for (const g of report.goals) {
+      g.done = counts[g.monthIndex] || 0;
+    }
+    return report;
+  }
+
   function applyLcrPayload(payload) {
     if (!payload || !payload.units) {
       throw new Error("JSON inválido: no hay unidades.");
@@ -384,7 +462,12 @@
     const previousUnits = clone(state?.units || []);
     let next = window.mapLcrExportToReport(payload, { onlyConverts });
     next = mergeHandFieldsByName(previousUnits, next);
+    // Conservar metas mensuales editadas al reimportar miembros
+    if (previousUnits?.length && state?.goals?.length) {
+      next.goals = clone(state.goals);
+    }
     recomputeBaptismsFromMembers(next);
+    recomputeGoalDones(next);
     state = next;
     refresh();
     const total = state._lcrMeta?.total ?? 0;
@@ -660,10 +743,36 @@
       })
       .join("");
 
+    const now = new Date();
+    const reportYear = state.years?.current ?? now.getFullYear();
+    const currentMonthIdx =
+      reportYear === now.getFullYear() ? now.getMonth() : reportYear > now.getFullYear() ? -1 : 12;
     const goals = state.goals
-      .map((g) => {
-        const done = g.done == null || g.done === "" ? "??" : g.done;
-        return `<div class="goal-card"><span>${escapeHtml(g.month)}</span><strong>${escapeHtml(done)}/${escapeHtml(g.goal)}</strong></div>`;
+      .map((g, i) => {
+        const idx = g.monthIndex != null ? g.monthIndex : i;
+        const done = Number(g.done) || 0;
+        const goal = Number(g.goal) || 0;
+        const isOpen = idx >= currentMonthIdx;
+        const met = done >= goal && goal > 0;
+        return `<div class="goal-card ${isOpen ? "goal-card--open" : ""} ${met ? "goal-card--met" : ""}" data-month-index="${idx}">
+          <span>${escapeHtml(g.month)}</span>
+          <strong class="only-print">${done}/${goal}</strong>
+          <div class="goal-card__value no-print">
+            <span class="goal-done" title="Confirmaciones del mes">${done}</span>
+            <span class="goal-slash">/</span>
+            <input
+              class="goal-input"
+              type="number"
+              min="0"
+              inputmode="numeric"
+              data-goal-index="${i}"
+              value="${goal}"
+              aria-label="Meta de ${escapeHtml(g.month)}"
+              title="Meta mensual (editable)"
+            />
+          </div>
+          ${isOpen ? `<em class="goal-card__hint">Meta editable</em>` : ""}
+        </div>`;
       })
       .join("");
 
@@ -802,7 +911,8 @@
 
       <section class="page">
         <div class="page__body">
-          <h2 class="page__title">Meta bautismal</h2>
+          <h2 class="page__title">Meta bautismal <span class="muted" style="font-size:0.85rem;font-family:inherit;font-weight:500">${escapeHtml(String(state.years?.current || ""))}</span></h2>
+          <p class="muted small no-print" style="margin:0 0 0.75rem">Real = confirmaciones del mes. La meta (derecha) se edita acá; el mes actual y futuros quedan visibles.</p>
           <div class="goals-grid">${goals}</div>
         </div>
       </section>
@@ -836,6 +946,29 @@
 
     wireInteractiveTables(els.report);
     wireRowEditors(els.report);
+    wireGoalEditors(els.report);
+  }
+
+  function wireGoalEditors(root) {
+    root.querySelectorAll("input[data-goal-index]").forEach((input) => {
+      if (input.dataset.bound) return;
+      input.dataset.bound = "1";
+      const commit = () => {
+        const i = Number(input.dataset.goalIndex);
+        if (!state.goals?.[i]) return;
+        state.goals[i].goal = input.value === "" ? 0 : Number(input.value) || 0;
+        saveState();
+        scheduleSheetsSave(600);
+        const card = input.closest(".goal-card");
+        const done = Number(state.goals[i].done) || 0;
+        const goal = Number(state.goals[i].goal) || 0;
+        card?.classList.toggle("goal-card--met", done >= goal && goal > 0);
+        const printEl = card?.querySelector(".only-print");
+        if (printEl) printEl.textContent = `${done}/${goal}`;
+      };
+      input.addEventListener("change", commit);
+      input.addEventListener("blur", commit);
+    });
   }
 
   function wireRowEditors(root) {
@@ -1074,16 +1207,27 @@
       )
       .join("") + `<button type="button" class="btn btn--ghost" id="addBaptism">+ Unidad bautismos</button>`;
 
-    els.goalsEditor.innerHTML = state.goals
-      .map(
-        (g, i) => `<div class="row-edit row-edit--compact">
-          <input data-path="goals.${i}.month" value="${escapeHtml(g.month)}" />
-          <input data-path="goals.${i}.done" type="number" min="0" placeholder="??" value="${g.done ?? ""}" />
-          <input data-path="goals.${i}.goal" type="number" min="0" value="${g.goal}" />
-          <button type="button" class="btn btn--tiny btn--ghost" data-remove-goal="${i}">✕</button>
-        </div>`
-      )
-      .join("");
+    els.goalsEditor.innerHTML =
+      `<p class="muted small">Real (izq.) = confirmaciones del mes · editá solo la meta.</p>` +
+      state.goals
+        .map((g, i) => {
+          const idx = g.monthIndex != null ? g.monthIndex : i;
+          const now = new Date();
+          const reportYear = state.years?.current ?? now.getFullYear();
+          const currentMonthIdx =
+            reportYear === now.getFullYear()
+              ? now.getMonth()
+              : reportYear > now.getFullYear()
+                ? -1
+                : 12;
+          const isOpen = idx >= currentMonthIdx;
+          return `<div class="row-edit row-edit--compact ${isOpen ? "goal-row--open" : ""}">
+            <span class="goal-editor-month">${escapeHtml(g.month)}${isOpen ? " ·" : ""}</span>
+            <input type="number" min="0" value="${Number(g.done) || 0}" disabled title="Confirmaciones (auto)" />
+            <input data-path="goals.${i}.goal" type="number" min="0" value="${Number(g.goal) || 0}" title="Meta" />
+          </div>`;
+        })
+        .join("");
 
     els.datesEditor.innerHTML = state.upcoming
       .map(
@@ -1192,6 +1336,7 @@
   }
 
   function refresh() {
+    recomputeGoalDones(state);
     renderEditors();
     renderReport();
     saveState();

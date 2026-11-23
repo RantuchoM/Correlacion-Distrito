@@ -12,14 +12,18 @@ window.DEFAULT_REPORT = {
     { unit: "San Antonio Oeste", prev: 0, curr: 4 }
   ],
   goals: [
-    { month: "Enero", done: 8, goal: 10 },
-    { month: "Febrero", done: 7, goal: 10 },
-    { month: "Marzo", done: 11, goal: 15 },
-    { month: "Abril", done: 3, goal: 16 },
-    { month: "Mayo", done: 11, goal: 15 },
-    { month: "Junio", done: 5, goal: 10 },
-    { month: "Julio", done: 5, goal: 6 },
-    { month: "Agosto", done: null, goal: 10 }
+    { month: "Enero", monthIndex: 0, done: 0, goal: 10 },
+    { month: "Febrero", monthIndex: 1, done: 0, goal: 10 },
+    { month: "Marzo", monthIndex: 2, done: 0, goal: 15 },
+    { month: "Abril", monthIndex: 3, done: 0, goal: 16 },
+    { month: "Mayo", monthIndex: 4, done: 0, goal: 15 },
+    { month: "Junio", monthIndex: 5, done: 0, goal: 10 },
+    { month: "Julio", monthIndex: 6, done: 0, goal: 6 },
+    { month: "Agosto", monthIndex: 7, done: 0, goal: 10 },
+    { month: "Septiembre", monthIndex: 8, done: 0, goal: 10 },
+    { month: "Octubre", monthIndex: 9, done: 0, goal: 10 },
+    { month: "Noviembre", monthIndex: 10, done: 0, goal: 10 },
+    { month: "Diciembre", monthIndex: 11, done: 0, goal: 10 }
   ],
   upcoming: [
     { date: "23 de agosto", name: "Vanina Francisco", unit: "América", status: "si" },

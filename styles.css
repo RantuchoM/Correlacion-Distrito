@@ -492,31 +492,96 @@ summary {
 
 .goals-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
   gap: 0.65rem;
 }
 
 .goal-card {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0.8rem 0.7rem;
+  padding: 0.7rem 0.55rem 0.65rem;
   background: linear-gradient(180deg, #fff, #f3f7f9);
   text-align: center;
+  display: grid;
+  gap: 0.2rem;
+  align-content: start;
 }
 
-.goal-card strong {
-  display: block;
-  font-size: 1.25rem;
-  margin-top: 0.25rem;
-  color: var(--brand-deep);
+.goal-card--open {
+  border-color: #8fc5ce;
+  box-shadow: inset 0 0 0 1px rgba(11, 95, 107, 0.12);
+  background: linear-gradient(180deg, #f7fcfd, #eef7f9);
 }
 
-.goal-card span {
-  font-size: 0.75rem;
+.goal-card--met {
+  border-color: #8fcdb0;
+  background: linear-gradient(180deg, #f3fbf6, #e7f6ec);
+}
+
+.goal-card > span:first-child {
+  font-size: 0.72rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
   font-weight: 700;
+}
+
+.goal-card__value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  margin-top: 0.15rem;
+  color: var(--brand-deep);
+  font-weight: 700;
+  font-size: 1.2rem;
+}
+
+.goal-done {
+  min-width: 1.2ch;
+}
+
+.goal-slash {
+  opacity: 0.55;
+  font-weight: 600;
+}
+
+.goal-input {
+  width: 2.8rem;
+  border: 1px solid #c5d4dc;
+  border-radius: 8px;
+  padding: 0.15rem 0.2rem;
+  text-align: center;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--brand-deep);
+  background: #fff;
+}
+
+.goal-input:focus {
+  outline: 2px solid #8fd0da;
+  outline-offset: 1px;
+}
+
+.goal-card__hint {
+  font-style: normal;
+  font-size: 0.65rem;
+  color: #5a8a94;
+  font-weight: 600;
+}
+
+.goal-editor-month {
+  min-width: 5.5rem;
+  font-size: 0.85rem;
+  color: #c9dae3;
+  align-self: center;
+}
+
+.goal-row--open {
+  outline: 1px solid #35505c;
+  border-radius: 8px;
+  padding: 0.2rem;
 }
 
 .dates-list {
