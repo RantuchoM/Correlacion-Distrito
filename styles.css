@@ -835,6 +835,21 @@ summary {
   font-weight: 700;
 }
 
+.att-chip {
+  display: inline-block;
+  min-width: 2.6rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.att-empty {
+  font-size: 0.85rem;
+}
+
 /* Asistencia: 0 rojo · 1–2 naranja · 3–4 amarillo · 5–6 verde */
 .att-0 {
   background: #f8d9dc !important;

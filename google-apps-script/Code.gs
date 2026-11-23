@@ -190,7 +190,10 @@ function writeMiembrosFromReport_(report) {
   var sh = ensureSheet_(SHEET_MIEMBROS);
   sh.clear();
   if (rows.length) {
-    sh.getRange(1, 1, rows.length, headers.length).setValues(rows);
+    var range = sh.getRange(1, 1, rows.length, headers.length);
+    // Texto puro: evita que "3/6" se convierta en fecha.
+    range.setNumberFormat("@");
+    range.setValues(rows);
   }
 }
 

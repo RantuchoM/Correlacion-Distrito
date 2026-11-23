@@ -1,6 +1,13 @@
 (() => {
   const STORAGE_KEY = "correlacion-distrito-v2";
   const SHEETS_CFG_KEY = "correlacion-distrito-sheets-cfg";
+  /** Config compartida: así la vista de rama ve las mismas asistencias que el distrito. */
+  const DEFAULT_SHEETS_CFG = {
+    url: "https://script.google.com/macros/s/AKfycbzuuhippetrKZWYCnlHxPnbXTmZnSUr0NMu0xKgp9ibyZNJfgiBzEqyvQ_mhlLOBJQY/exec",
+    token: "cd-viedma-mR7k9x2",
+    autosave: true,
+    loadOnOpen: true,
+  };
 
   const els = {
     report: document.getElementById("report"),
@@ -47,9 +54,16 @@
         if (raw) report = JSON.parse(raw);
       } catch (_) {}
     }
-    if (!report) report = clone(window.DEFAULT_REPORT);
+    if (!report) {
+      report = clone(window.DEFAULT_REPORT);
+      report._seedDefault = true;
+    }
     if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(report);
     return report;
+  }
+
+  function isSeedDefaultReport(report = state) {
+    return !!(report && report._seedDefault);
   }
 
   function canEdit() {
@@ -97,9 +111,10 @@
 
   function loadSheetsCfg() {
     try {
-      return JSON.parse(localStorage.getItem(SHEETS_CFG_KEY) || "{}") || {};
+      const saved = JSON.parse(localStorage.getItem(SHEETS_CFG_KEY) || "{}") || {};
+      return { ...DEFAULT_SHEETS_CFG, ...saved };
     } catch (_) {
-      return {};
+      return { ...DEFAULT_SHEETS_CFG };
     }
   }
 
@@ -208,10 +223,13 @@
         throw new Error("La hoja no devolvió un informe válido.");
       }
       state = data.report;
+      delete state._seedDefault;
       recomputeBaptismsFromMembers(state);
       recomputeGoalDones(state);
+      if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(state);
       suppressSheetsSave = true;
       try {
+        saveState();
         refresh();
       } finally {
         suppressSheetsSave = false;
@@ -271,11 +289,15 @@
   function indexMembersByMatchKey(units) {
     const byUnitKey = new Map();
     const byKey = new Map();
+    const unitKey = (name) =>
+      window.CorrelacionSummary
+        ? window.CorrelacionSummary.normUnit(name)
+        : normName(name);
     for (const unit of units || []) {
       for (const member of unit.members || []) {
         const key = nameMatchKey(member.name);
         if (!key) continue;
-        byUnitKey.set(`${normName(unit.name)}::${key}`, member);
+        byUnitKey.set(`${unitKey(unit.name)}::${key}`, member);
         byKey.set(key, member);
       }
     }
@@ -315,8 +337,11 @@
         if (!key) continue;
         const att = String(incoming.attendance || "").trim();
         if (!att) continue;
+        const unitKey = window.CorrelacionSummary
+          ? window.CorrelacionSummary.normUnit(unit.name)
+          : normName(unit.name);
         const target =
-          byUnitKey.get(`${normName(unit.name)}::${key}`) || byKey.get(key);
+          byUnitKey.get(`${unitKey}::${key}`) || byKey.get(key);
         if (!target) {
           unmatched.push(`${unit.name}: ${incoming.name}`);
           continue;
@@ -488,25 +513,27 @@
     return report;
   }
 
-  function applyLcrPayload(payload) {
+  function applyLcrPayload(payload, { skipHandMerge = false } = {}) {
     if (!payload || !payload.units) {
       throw new Error("JSON inválido: no hay unidades.");
     }
     const onlyConverts = document.getElementById("onlyConverts")?.checked !== false;
     const previousUnits = clone(state?.units || []);
+    const skipMerge = skipHandMerge || isSeedDefaultReport(state);
     let next = window.mapLcrExportToReport(payload, { onlyConverts });
-    next = mergeHandFieldsByName(previousUnits, next);
+    if (!skipMerge) next = mergeHandFieldsByName(previousUnits, next);
     // Conservar metas mensuales y resumen (tildes / personas) al reimportar
-    if (previousUnits?.length && state?.goals?.length) {
+    if (!skipMerge && previousUnits?.length && state?.goals?.length) {
       next.goals = clone(state.goals);
     }
-    if (state?.summary) next.summary = clone(state.summary);
+    if (!skipMerge && state?.summary) next.summary = clone(state.summary);
     if (state?.summaryUnits?.length) {
       // mantener columnas de resumen alineadas a unidades nuevas
       next.summaryUnits = next.units.map((u) =>
         String(u.name || "").replace(/^Rama\s+/i, "")
       );
     }
+    delete next._seedDefault;
     if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(next);
     recomputeBaptismsFromMembers(next);
     recomputeGoalDones(next);
@@ -855,15 +882,21 @@
               <td>${escapeHtml(age)}</td>
               <td>${escapeHtml(sex)}</td>
               <td class="col-asistencia">
-                <input
+                ${
+                  canEdit()
+                    ? `<input
                   type="text"
                   class="row-dato no-print ${m.attendance ? attendanceClass(m.attendance) : ""}"
                   data-field="attendance"
                   value="${escapeHtml(m.attendance || "")}"
-                  placeholder="Asist…"
+                  placeholder="0/6"
                   ${editAttr}
                 />
-                <span class="dato-print only-print ${m.attendance ? attendanceClass(m.attendance) : ""}">${escapeHtml(m.attendance || "")}</span>
+                <span class="dato-print only-print ${m.attendance ? attendanceClass(m.attendance) : ""}">${escapeHtml(m.attendance || "")}</span>`
+                    : m.attendance
+                      ? `<span class="att-chip ${attendanceClass(m.attendance)}">${escapeHtml(m.attendance)}</span>`
+                      : `<span class="att-empty muted">—</span>`
+                }
               </td>
               <td>${statusChip(m.temple)}</td>
               <td>${statusChip(m.calling)}</td>
@@ -2141,7 +2174,7 @@
       setImportStatus("Volvé a importar para aplicar el filtro.");
     });
 
-    applySheetsCfgToUi({ autosave: true, loadOnOpen: false, ...loadSheetsCfg() });
+    applySheetsCfgToUi(loadSheetsCfg());
 
     const persistSheetsFields = () => {
       saveSheetsCfg(getSheetsCfgFromUi());
@@ -2178,7 +2211,7 @@
       importAttendanceFromClipboard();
     }
 
-    // Carga automática: Sheets (si está marcado) o archivos del sitio
+    // Carga automática: Sheets (compartido) → localStorage → seed del repo
     (async () => {
       const cfg = getSheetsCfgFromUi();
       if (cfg.loadOnOpen && sheetsConfigured(cfg)) {
@@ -2186,19 +2219,22 @@
         if (ok) return;
       }
 
-      const force =
+      const forceLcr =
         location.hash === "#from-lcr" ||
-        new URLSearchParams(location.search).get("lcr") === "1" ||
-        /\.github\.io$/i.test(location.hostname);
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw && !force) return;
+        new URLSearchParams(location.search).get("lcr") === "1";
+      const hasStored = !!localStorage.getItem(STORAGE_KEY);
+      // No reimportar en cada visita a GitHub Pages: eso pisaba asistencias
+      // y mezclaba datos demo (p. ej. 3/6 de Arregui) en la vista de rama.
+      if (hasStored && !forceLcr && !isSeedDefaultReport(state)) return;
 
       try {
         const jsonRes = await fetch("lcr-export.json", { cache: "no-store" });
         if (jsonRes.ok) {
           const payload = await jsonRes.json();
           if (payload?.units) {
-            applyLcrPayload(payload);
+            applyLcrPayload(payload, {
+              skipHandMerge: forceLcr || isSeedDefaultReport(state),
+            });
             return;
           }
         }
