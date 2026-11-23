@@ -8,7 +8,7 @@ window.DEFAULT_REPORT = {
   baptisms: [
     { unit: "América", prev: 6, curr: 24 },
     { unit: "Viedma", prev: 12, curr: 18 },
-    { unit: "Patagones", prev: 5, curr: 5 },
+    { unit: "Carmen de Patagones", prev: 5, curr: 5 },
     { unit: "San Antonio Oeste", prev: 0, curr: 4 }
   ],
   goals: [

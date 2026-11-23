@@ -251,6 +251,16 @@
       if (!silent) setSheetsStatus("Configurá URL y token para guardar en Sheets.");
       return false;
     }
+    // Nunca subir el placeholder de ejemplo: pisaría el informe real del distrito.
+    if (isSeedDefaultReport(state)) {
+      if (!silent) setSheetsStatus("Todavía no hay informe real para guardar (esperá a Sheets).");
+      return false;
+    }
+    // Solo lectura: no escribe. Evita que un link de rama sobrescriba Sheets.
+    if (!canEdit()) {
+      if (!silent) setSheetsStatus("Vista solo lectura: no se guarda en Sheets.");
+      return false;
+    }
     if (sheetsSaving) {
       scheduleSheetsSave(800);
       return false;
@@ -260,6 +270,7 @@
     try {
       const report = clone(state);
       delete report._lcrMeta;
+      delete report._seedDefault;
       const data = await sheetsRequest({
         method: "POST",
         action: "save",
@@ -294,6 +305,9 @@
       setSheetsStatus("Configurá URL y token para cargar desde Sheets.");
       return false;
     }
+    // Cancelá cualquier autosave pendiente del placeholder inicial.
+    clearTimeout(sheetsSaveTimer);
+    sheetsSaveTimer = null;
     setSheetsStatus("Cargando desde Sheets…");
     try {
       const data = await sheetsRequest({ method: "GET", action: "load" });
@@ -301,6 +315,10 @@
         throw new Error("La hoja no devolvió un informe válido.");
       }
       state = data.report;
+      // Si alguna vez se guardó el demo por error, no lo trates como “datos reales”.
+      if (state._seedDefault) {
+        console.warn("Sheets devolvió el informe de ejemplo (_seedDefault).");
+      }
       delete state._seedDefault;
       recomputeBaptismsFromMembers(state);
       recomputeGoalDones(state);
@@ -328,6 +346,8 @@
 
   function scheduleSheetsSave(delayMs = 1200) {
     if (suppressSheetsSave) return;
+    if (isSeedDefaultReport(state)) return;
+    if (!canEdit()) return;
     const cfg = getSheetsCfgFromUi();
     if (!cfg.autosave || !sheetsConfigured(cfg)) return;
     clearTimeout(sheetsSaveTimer);
@@ -1743,7 +1763,8 @@
     recomputeGoalDones(state);
     renderEditors();
     renderReport();
-    saveState();
+    // No persistir placeholder ni vistas de solo lectura (evita pisar Sheets).
+    if (!isSeedDefaultReport(state) && canEdit()) saveState();
   }
 
   function bind() {
@@ -2458,5 +2479,13 @@
   bind();
   renderAccessGateLinks();
   applyAccessChrome();
-  if (session) refresh();
+  // Pintá UI si hay sesión, pero sin autosave: el informe real llega de Sheets.
+  if (session) {
+    suppressSheetsSave = true;
+    try {
+      refresh();
+    } finally {
+      suppressSheetsSave = false;
+    }
+  }
 })();
