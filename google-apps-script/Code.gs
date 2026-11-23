@@ -16,6 +16,9 @@
 var SCRIPT_TOKEN = "CAMBIAR_ESTE_TOKEN";
 var SHEET_MIEMBROS = "Miembros";
 var SHEET_INFORME = "Informe";
+var SHEET_ACCESO = "Acceso";
+/** URL pública de la app (GitHub Pages). */
+var APP_BASE_URL = "https://rantuchom.github.io/Correlacion-Distrito/";
 
 function doGet(e) {
   try {
@@ -24,6 +27,10 @@ function doGet(e) {
     var action = String(p.action || "load");
     if (action === "ping") {
       return json_({ ok: true, ping: true });
+    }
+    if (action === "seedAcceso") {
+      writeAccesoSheet_();
+      return json_({ ok: true, sheet: SHEET_ACCESO });
     }
     return json_({ ok: true, report: loadReport_() });
   } catch (err) {
@@ -92,6 +99,43 @@ function saveReport_(report) {
   sh.getRange(1, 1).setValue(JSON.stringify(report));
   sh.getRange(2, 1).setValue(new Date().toISOString());
   writeMiembrosFromReport_(report);
+  writeAccesoSheet_();
+}
+
+/** Ejecutable desde el editor: rellena la pestaña Acceso. */
+function seedAcceso() {
+  writeAccesoSheet_();
+}
+
+/**
+ * Pestaña Acceso: links cortos por rama / distrito (para compartir fuera de la landing).
+ * Tokens/PIN por defecto alineados con summary.js DEFAULT_ACCESS.
+ */
+function writeAccesoSheet_() {
+  var base = String(APP_BASE_URL || "").replace(/\/?$/, "/");
+  var rows = [
+    ["Vista", "Token ver", "PIN editar", "Link"],
+    ["Distrito (general)", "dv1", "2026", base + "?d=dv1"],
+    ["Rama América", "am1", "1111", base + "?rama=América&v=am1"],
+    ["Rama Viedma", "vi1", "2222", base + "?rama=Viedma&v=vi1"],
+    [
+      "Rama Carmen de Patagones",
+      "cp1",
+      "3333",
+      base + "?rama=Carmen%20de%20Patagones&v=cp1",
+    ],
+    [
+      "Rama San Antonio Oeste",
+      "sa1",
+      "4444",
+      base + "?rama=San%20Antonio%20Oeste&v=sa1",
+    ],
+  ];
+  var sh = ensureSheet_(SHEET_ACCESO);
+  sh.clear();
+  sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  sh.setFrozenRows(1);
+  sh.autoResizeColumns(1, 4);
 }
 
 function loadReport_() {

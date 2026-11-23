@@ -1188,10 +1188,17 @@
     const btnEdit = document.getElementById("btnUnlockEdit");
     const btnLock = document.getElementById("btnLockEdit");
     const btnConfig = document.getElementById("btnOpenConfig");
+    const gateToken = document.getElementById("gateDistrictToken");
 
     if (!session) {
       if (gate) gate.hidden = false;
       if (main) main.hidden = true;
+      // Prefill desde ?d= si el link no alcanzó a abrir (clave distinta en este navegador).
+      if (gateToken && !gateToken.value) {
+        const d = new URLSearchParams(location.search).get("d") ||
+          new URLSearchParams(location.search).get("distrito");
+        if (d) gateToken.value = d;
+      }
       return;
     }
     if (gate) gate.hidden = true;
@@ -1219,14 +1226,7 @@
   }
 
   function renderAccessGateLinks() {
-    const box = document.getElementById("gateRamaLinks");
-    if (!box || !accessCfg) return;
-    box.innerHTML = Object.keys(accessCfg.ramas || {})
-      .map((rama) => {
-        const href = window.CorrelacionSummary.ramaViewLink(rama, accessCfg);
-        return `<a class="access-gate__link" href="${escapeHtml(href)}">${escapeHtml(rama)} <code>?v=${escapeHtml(accessCfg.ramas[rama].view)}</code></a>`;
-      })
-      .join("");
+    /* Los links de rama viven en Google Sheets (pestaña Acceso), no en la landing. */
   }
 
   function wireGoalEditors(root) {
@@ -1954,7 +1954,12 @@
     document.getElementById("btnGateDistrict")?.addEventListener("click", () => {
       const token = String(document.getElementById("gateDistrictToken")?.value || "").trim();
       const gateStatus = document.getElementById("gateStatus");
-      if (!accessCfg || token !== String(accessCfg.districtView || "")) {
+      const expected = String(
+        accessCfg?.districtView ||
+          window.CorrelacionSummary?.DEFAULT_ACCESS?.districtView ||
+          ""
+      ).trim();
+      if (!token || token.toLowerCase() !== expected.toLowerCase()) {
         if (gateStatus) gateStatus.textContent = "Clave de distrito incorrecta.";
         return;
       }

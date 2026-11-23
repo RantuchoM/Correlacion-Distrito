@@ -207,11 +207,17 @@
     const v = String(q.get("v") || "").trim();
     const d = String(q.get("d") || q.get("distrito") || "").trim();
     const vista = String(q.get("vista") || "").trim().toLowerCase();
+    const districtToken = String(
+      access.districtView || DEFAULT_ACCESS.districtView || ""
+    ).trim();
+    const dMatch =
+      d && districtToken && d.toLowerCase() === districtToken.toLowerCase();
 
-    if (d && d === String(access.districtView || "")) {
+    if (dMatch) {
       return { mode: "district", rama: null, canEdit: false, via: "url-district" };
     }
-    if (vista === "distrito" && d && d === String(access.districtView || "")) {
+    // Compat: ?vista=distrito&d=…
+    if (vista === "distrito" && dMatch) {
       return { mode: "district", rama: null, canEdit: false, via: "url-district" };
     }
 
