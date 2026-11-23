@@ -16,6 +16,34 @@ window.mapLcrExportToReport = function mapLcrExportToReport(payload, options = {
   base.period = `${months[now.getMonth()]} ${now.getFullYear()}`;
   base.years = { previous: now.getFullYear() - 1, current: now.getFullYear() };
 
+  const MONTHS_ES = {
+    ene: 0, enero: 0,
+    feb: 1, febrero: 1,
+    mar: 2, marzo: 2,
+    abr: 3, abril: 3,
+    may: 4, mayo: 4,
+    jun: 5, junio: 5,
+    jul: 6, julio: 6,
+    ago: 7, agosto: 7,
+    sep: 8, sept: 8, septiembre: 8,
+    oct: 9, octubre: 9,
+    nov: 10, noviembre: 10,
+    dic: 11, diciembre: 11,
+  };
+
+  function yearFromLooseDate(text) {
+    const t = String(text || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!t) return null;
+    let m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (m) return m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+    m = t.match(/^(\d{1,2})\s+([a-záéíóú.]+)\s+(\d{4})$/i);
+    if (m && MONTHS_ES[m[2].replace(/\./g, "")] != null) return Number(m[3]);
+    m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return Number(m[1]);
+    m = t.match(/(20\d{2}|19\d{2})/);
+    return m ? Number(m[1]) : null;
+  }
+
   const sexLabel = (sex) => {
     const s = String(sex || "").trim().toUpperCase();
     if (s === "V" || s === "H" || s === "MALE") return "H";
@@ -61,11 +89,23 @@ window.mapLcrExportToReport = function mapLcrExportToReport(payload, options = {
     return { name: unit.name, members };
   });
 
-  base.baptisms = base.units.map((u) => ({
-    unit: u.name.replace(/^Rama\s+/i, ""),
-    prev: 0,
-    curr: u.members.length,
-  }));
+  // Contar confirmaciones por año real (antes: todo iba a "curr").
+  const prevY = base.years.previous;
+  const currY = base.years.current;
+  base.baptisms = base.units.map((u) => {
+    let prev = 0;
+    let curr = 0;
+    for (const m of u.members) {
+      const y = yearFromLooseDate(m.baptism);
+      if (y === prevY) prev += 1;
+      else if (y === currY) curr += 1;
+    }
+    return {
+      unit: u.name.replace(/^Rama\s+/i, ""),
+      prev,
+      curr,
+    };
+  });
 
   base.summaryUnits = base.units.map((u) => u.name.replace(/^Rama\s+/i, ""));
   while (base.summaryUnits.length < 4) base.summaryUnits.push("—");

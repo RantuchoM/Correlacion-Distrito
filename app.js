@@ -174,6 +174,7 @@
         throw new Error("La hoja no devolvió un informe válido.");
       }
       state = data.report;
+      recomputeBaptismsFromMembers(state);
       suppressSheetsSave = true;
       try {
         refresh();
@@ -343,6 +344,38 @@
     return nextReport;
   }
 
+  function yearFromMemberBaptism(text) {
+    const ts = parseLooseDate(text);
+    if (ts == null) {
+      const m = String(text || "").match(/(20\d{2}|19\d{2})/);
+      return m ? Number(m[1]) : null;
+    }
+    return new Date(ts).getUTCFullYear();
+  }
+
+  /** Recalcula bautismos prev/curr según fecha de confirmación de cada miembro. */
+  function recomputeBaptismsFromMembers(report = state) {
+    if (!report?.units) return report;
+    const prevY = report.years?.previous ?? new Date().getFullYear() - 1;
+    const currY = report.years?.current ?? new Date().getFullYear();
+    report.years = { previous: prevY, current: currY };
+    report.baptisms = report.units.map((u) => {
+      let prev = 0;
+      let curr = 0;
+      for (const m of u.members || []) {
+        const y = yearFromMemberBaptism(m.baptism);
+        if (y === prevY) prev += 1;
+        else if (y === currY) curr += 1;
+      }
+      return {
+        unit: String(u.name || "").replace(/^Rama\s+/i, ""),
+        prev,
+        curr,
+      };
+    });
+    return report;
+  }
+
   function applyLcrPayload(payload) {
     if (!payload || !payload.units) {
       throw new Error("JSON inválido: no hay unidades.");
@@ -351,13 +384,19 @@
     const previousUnits = clone(state?.units || []);
     let next = window.mapLcrExportToReport(payload, { onlyConverts });
     next = mergeHandFieldsByName(previousUnits, next);
+    recomputeBaptismsFromMembers(next);
     state = next;
     refresh();
     const total = state._lcrMeta?.total ?? 0;
     const kept = state._mergeMeta?.kept || 0;
+    const bap = state.baptisms.reduce(
+      (a, b) => ({ prev: a.prev + b.prev, curr: a.curr + b.curr }),
+      { prev: 0, curr: 0 }
+    );
     setImportStatus(
       `Importado: ${state.units.length} unidades, ${total} personas` +
         (onlyConverts ? " (solo conversos)" : "") +
+        ` · bautismos ${state.years.previous}:${bap.prev} / ${state.years.current}:${bap.curr}` +
         (kept ? ` · ${kept} filas conservaron datos previos` : "") +
         "."
     );
