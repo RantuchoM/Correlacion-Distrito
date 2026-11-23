@@ -12,7 +12,6 @@
     report: document.getElementById("report"),
     baptismsEditor: document.getElementById("baptismsEditor"),
     goalsEditor: document.getElementById("goalsEditor"),
-    datesEditor: document.getElementById("datesEditor"),
     unitsEditor: document.getElementById("unitsEditor"),
     summaryEditor: document.getElementById("summaryEditor"),
     metaTitle: document.getElementById("metaTitle"),
@@ -84,6 +83,87 @@
     return (state.units || []).filter(
       (u) => S.normUnit(u.name) === S.normUnit(session.rama)
     );
+  }
+
+  /** Bautismos del año: en enlace de rama, solo esa unidad. */
+  function visibleBaptisms() {
+    const all = state.baptisms || [];
+    if (!isRamaMode()) return all;
+    const S = window.CorrelacionSummary;
+    return all.filter((b) => S.normUnit(b.unit) === S.normUnit(session.rama));
+  }
+
+  function computeGoalDonesFromUnits(units, year) {
+    const counts = Array(12).fill(0);
+    for (const unit of units || []) {
+      for (const m of unit.members || []) {
+        const my = monthYearFromBaptism(m.baptism);
+        if (!my || my.year !== year) continue;
+        counts[my.month] += 1;
+      }
+    }
+    return counts;
+  }
+
+  /** Metas mensuales por rama (separadas del distrito). */
+  function ensureUnitGoals(ramaName) {
+    if (!ramaName) return [];
+    const S = window.CorrelacionSummary;
+    if (!state.unitGoals) state.unitGoals = {};
+    const short = S.shortUnit(ramaName);
+    const existingKey = Object.keys(state.unitGoals).find(
+      (k) => S.normUnit(k) === S.normUnit(ramaName)
+    );
+    const existing = existingKey ? state.unitGoals[existingKey] : null;
+    const prevByIdx = new Map();
+    for (const g of existing || []) {
+      const idx = g.monthIndex != null ? Number(g.monthIndex) : monthKey(g.month);
+      if (idx < 0 || idx > 11) continue;
+      prevByIdx.set(idx, g);
+    }
+    // Primera vez: heredar metas del distrito como punto de partida
+    if (!existing?.length) {
+      for (const g of state.goals || []) {
+        const idx = g.monthIndex != null ? Number(g.monthIndex) : monthKey(g.month);
+        if (idx < 0 || idx > 11) continue;
+        if (!prevByIdx.has(idx)) prevByIdx.set(idx, g);
+      }
+    }
+    const currY = state.years?.current ?? new Date().getFullYear();
+    const list = MONTH_NAMES.map((month, i) => {
+      const prev = prevByIdx.get(i);
+      const goalNum = prev?.goal;
+      return {
+        month,
+        monthIndex: i,
+        year: currY,
+        done: 0,
+        goal: goalNum == null || goalNum === "" ? 10 : Number(goalNum) || 0,
+      };
+    });
+    if (existingKey && existingKey !== short) delete state.unitGoals[existingKey];
+    state.unitGoals[short] = list;
+    return list;
+  }
+
+  /** Modelo de metas para la vista actual (distrito o rama del enlace). */
+  function goalsForDisplay() {
+    ensureGoalsForCurrentYear(state);
+    const currY = state.years?.current ?? new Date().getFullYear();
+    const dones = computeGoalDonesFromUnits(visibleUnits(), currY);
+    const source = isRamaMode()
+      ? ensureUnitGoals(session.rama)
+      : state.goals || [];
+    return source.map((g, i) => {
+      const idx = g.monthIndex != null ? g.monthIndex : i;
+      return {
+        month: g.month || MONTH_NAMES[idx],
+        monthIndex: idx,
+        done: dones[idx] || 0,
+        goal: Number(g.goal) || 0,
+        index: i,
+      };
+    });
   }
 
   function saveState() {
@@ -493,19 +573,12 @@
     return report;
   }
 
-  /** done = confirmaciones del mes (año del informe). */
+  /** done = confirmaciones del mes (año del informe) — siempre a nivel distrito. */
   function recomputeGoalDones(report = state) {
     if (!report) return report;
     ensureGoalsForCurrentYear(report);
     const currY = report.years.current;
-    const counts = Array(12).fill(0);
-    for (const unit of report.units || []) {
-      for (const m of unit.members || []) {
-        const my = monthYearFromBaptism(m.baptism);
-        if (!my || my.year !== currY) continue;
-        counts[my.month] += 1;
-      }
-    }
+    const counts = computeGoalDonesFromUnits(report.units || [], currY);
     for (const g of report.goals) {
       g.done = counts[g.monthIndex] || 0;
     }
@@ -525,6 +598,7 @@
     if (!skipMerge && previousUnits?.length && state?.goals?.length) {
       next.goals = clone(state.goals);
     }
+    if (!skipMerge && state?.unitGoals) next.unitGoals = clone(state.unitGoals);
     if (!skipMerge && state?.summary) next.summary = clone(state.summary);
     if (state?.summaryUnits?.length) {
       // mantener columnas de resumen alineadas a unidades nuevas
@@ -786,7 +860,8 @@
   function renderReport() {
     const prevYear = state.years.previous;
     const currYear = state.years.current;
-    const baptisms = state.baptisms;
+    const baptisms = visibleBaptisms();
+    const ramaOnly = isRamaMode();
     const totals = baptisms.reduce(
       (acc, row) => {
         acc.prev += Number(row.prev) || 0;
@@ -810,14 +885,21 @@
         return `<td class="${deltaClass(d)}">${sign}</td>`;
       })
       .join("");
+    const districtHead = ramaOnly ? "" : sortHeader("Distrito", { type: "num" });
+    const districtPrev = ramaOnly ? "" : `<td>${totals.prev}</td>`;
+    const districtCurr = ramaOnly ? "" : `<td>${totals.curr}</td>`;
+    const districtDelta = ramaOnly
+      ? ""
+      : `<td class="${deltaClass(totalDelta)}">${totalDelta > 0 ? "+" : ""}${totalDelta}</td>`;
 
     const now = new Date();
     const reportYear = state.years?.current ?? now.getFullYear();
     const currentMonthIdx =
       reportYear === now.getFullYear() ? now.getMonth() : reportYear > now.getFullYear() ? -1 : 12;
-    const goals = state.goals
-      .map((g, i) => {
-        const idx = g.monthIndex != null ? g.monthIndex : i;
+    const goalsView = goalsForDisplay();
+    const goals = goalsView
+      .map((g) => {
+        const idx = g.monthIndex != null ? g.monthIndex : g.index;
         const done = Number(g.done) || 0;
         const goal = Number(g.goal) || 0;
         const isOpen = idx >= currentMonthIdx;
@@ -833,25 +915,16 @@
               type="number"
               min="0"
               inputmode="numeric"
-              data-goal-index="${i}"
+              data-goal-index="${g.index}"
               value="${goal}"
               aria-label="Meta de ${escapeHtml(g.month)}"
               title="Meta mensual (editable)"
+              ${canEdit() ? "" : "disabled"}
             />
           </div>
           ${isOpen ? `<em class="goal-card__hint">Meta editable</em>` : ""}
         </div>`;
       })
-      .join("");
-
-    const dates = state.upcoming
-      .map(
-        (d) => `<div class="date-item">
-          <div class="date-item__day">${escapeHtml(d.date)}</div>
-          <div><strong>${escapeHtml(d.name)}</strong> · ${escapeHtml(d.unit)}</div>
-          ${statusChip(statusLabel(d.status))}
-        </div>`
-      )
       .join("");
 
     const S = window.CorrelacionSummary;
@@ -1005,7 +1078,7 @@
 
       <section class="page">
         <div class="page__body">
-          <h2 class="page__title">Bautismos del año</h2>
+          <h2 class="page__title">Bautismos del año${ramaOnly ? ` · ${escapeHtml(session.rama)}` : ""}</h2>
           <div class="badge-row">
             <span class="badge">${prevYear}: <strong>${totals.prev}</strong></span>
             <span class="badge">${currYear}: <strong>${totals.curr}</strong></span>
@@ -1017,13 +1090,13 @@
               <tr>
                 ${sortHeader("")}
                 ${baptisms.map((b) => sortHeader(b.unit, { type: "num" })).join("")}
-                ${sortHeader("Distrito", { type: "num" })}
+                ${districtHead}
               </tr>
             </thead>
             <tbody>
-              <tr><td>${prevYear}</td>${prevCells}<td>${totals.prev}</td></tr>
-              <tr><td>${currYear}</td>${currCells}<td>${totals.curr}</td></tr>
-              <tr><td>+/−</td>${deltaCells}<td class="${deltaClass(totalDelta)}">${totalDelta > 0 ? "+" : ""}${totalDelta}</td></tr>
+              <tr><td>${prevYear}</td>${prevCells}${districtPrev}</tr>
+              <tr><td>${currYear}</td>${currCells}${districtCurr}</tr>
+              <tr><td>+/−</td>${deltaCells}${districtDelta}</tr>
             </tbody>
           </table>
         </div>
@@ -1031,16 +1104,9 @@
 
       <section class="page">
         <div class="page__body">
-          <h2 class="page__title">Meta bautismal <span class="muted" style="font-size:0.85rem;font-family:inherit;font-weight:500">${escapeHtml(String(state.years?.current || ""))}</span></h2>
-          <p class="muted small no-print" style="margin:0 0 0.75rem">Real = confirmaciones del mes. La meta (derecha) se edita acá; el mes actual y futuros quedan visibles.</p>
+          <h2 class="page__title">Meta bautismal${ramaOnly ? ` · ${escapeHtml(session.rama)}` : ""} <span class="muted" style="font-size:0.85rem;font-family:inherit;font-weight:500">${escapeHtml(String(state.years?.current || ""))}</span></h2>
+          <p class="muted small no-print" style="margin:0 0 0.75rem">Real = confirmaciones del mes${ramaOnly ? " de esta rama" : ""}. La meta (derecha) se edita acá; el mes actual y futuros quedan visibles.</p>
           <div class="goals-grid">${goals}</div>
-        </div>
-      </section>
-
-      <section class="page">
-        <div class="page__body">
-          <h2 class="page__title">Fechas actuales</h2>
-          <div class="dates-list">${dates || "<p class='muted'>Sin fechas cargadas.</p>"}</div>
         </div>
       </section>
 
@@ -1294,14 +1360,22 @@
       if (input.dataset.bound) return;
       input.dataset.bound = "1";
       const commit = () => {
+        if (!canEdit()) return;
         const i = Number(input.dataset.goalIndex);
-        if (!state.goals?.[i]) return;
-        state.goals[i].goal = input.value === "" ? 0 : Number(input.value) || 0;
+        const value = input.value === "" ? 0 : Number(input.value) || 0;
+        if (isRamaMode()) {
+          const list = ensureUnitGoals(session.rama);
+          if (!list?.[i]) return;
+          list[i].goal = value;
+        } else {
+          if (!state.goals?.[i]) return;
+          state.goals[i].goal = value;
+        }
         saveState();
         scheduleSheetsSave(600);
         const card = input.closest(".goal-card");
-        const done = Number(state.goals[i].done) || 0;
-        const goal = Number(state.goals[i].goal) || 0;
+        const done = Number(card?.querySelector(".goal-done")?.textContent) || 0;
+        const goal = value;
         card?.classList.toggle("goal-card--met", done >= goal && goal > 0);
         const printEl = card?.querySelector(".only-print");
         if (printEl) printEl.textContent = `${done}/${goal}`;
@@ -1524,11 +1598,6 @@
     });
   }
 
-  function statusLabel(code) {
-    const map = { si: "Sí", no: "No", pend: "Pendiente", na: "N/A" };
-    return map[code] || code || "Pendiente";
-  }
-
   function renderEditors() {
     els.metaTitle.value = state.title;
     els.metaPeriod.value = state.period;
@@ -1568,24 +1637,6 @@
           </div>`;
         })
         .join("");
-
-    els.datesEditor.innerHTML = state.upcoming
-      .map(
-        (d, i) => `<div class="date-card">
-          <div class="row-edit row-edit--date">
-            <input data-path="upcoming.${i}.date" value="${escapeHtml(d.date)}" placeholder="Fecha" />
-            <input data-path="upcoming.${i}.name" value="${escapeHtml(d.name)}" placeholder="Nombre" />
-            <select data-path="upcoming.${i}.status">
-              <option value="si" ${d.status === "si" ? "selected" : ""}>Sí</option>
-              <option value="pend" ${d.status === "pend" ? "selected" : ""}>Pendiente</option>
-              <option value="no" ${d.status === "no" ? "selected" : ""}>No</option>
-            </select>
-            <button type="button" class="btn btn--tiny btn--ghost" data-remove-date="${i}">✕</button>
-          </div>
-          <input data-path="upcoming.${i}.unit" value="${escapeHtml(d.unit)}" placeholder="Unidad" style="margin-top:0.35rem" />
-        </div>`
-      )
-      .join("");
 
     els.unitsEditor.innerHTML = state.units
       .map((unit, ui) => {
@@ -1732,16 +1783,6 @@
         refresh();
         return;
       }
-      if (t.id === "addDate" || t.closest("#addDate")) {
-        state.upcoming.push({
-          date: "Nueva fecha",
-          name: "Nombre",
-          unit: "Unidad",
-          status: "pend",
-        });
-        refresh();
-        return;
-      }
       if (t.id === "addUnit" || t.closest("#addUnit")) {
         state.units.push({
           name: "Nueva unidad",
@@ -1770,11 +1811,6 @@
       }
       if (t.dataset.removeGoal != null) {
         state.goals.splice(Number(t.dataset.removeGoal), 1);
-        refresh();
-        return;
-      }
-      if (t.dataset.removeDate != null) {
-        state.upcoming.splice(Number(t.dataset.removeDate), 1);
         refresh();
         return;
       }
