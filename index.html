@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=attsync2" />
+  <link rel="stylesheet" href="styles.css?v=sheetsonly1" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
@@ -201,9 +201,8 @@
       <details open class="import-box" id="sheetsBox">
         <summary>Google Sheets</summary>
         <p class="muted small">
-          Pegá la URL de la app web de Apps Script (<code>google-apps-script/Code.gs</code>)
-          y el mismo token que configuraste en el script. Así los tildes y datos de cada fila
-          se guardan en la hoja.
+          El informe se carga y guarda solo en Google Sheets (misma fuente para distrito y ramas).
+          No se guarda una copia local del informe en el navegador.
         </p>
         <label class="field">
           <span>URL Apps Script</span>
@@ -217,13 +216,10 @@
           <input type="checkbox" id="sheetsAutosave" checked />
           Guardar en Sheets al tildar / editar (automático)
         </label>
-        <label class="check">
-          <input type="checkbox" id="sheetsLoadOnOpen" />
-          Al abrir, cargar desde Sheets
-        </label>
+        <input type="checkbox" id="sheetsLoadOnOpen" checked hidden />
         <div class="panel__actions panel__actions--inline">
           <button type="button" class="btn btn--primary" id="btnSheetsSave">Guardar ahora</button>
-          <button type="button" class="btn btn--ghost" id="btnSheetsLoad">Cargar</button>
+          <button type="button" class="btn btn--ghost" id="btnSheetsLoad">Recargar desde Sheets</button>
         </div>
         <p class="hint" id="sheetsStatus"></p>
       </details>
@@ -288,10 +284,10 @@
     </div>
   </div>
 
-  <script src="data.js?v=attsync2"></script>
-  <script src="lcr-map.js?v=attsync2"></script>
-  <script src="summary.js?v=attsync2"></script>
-  <script src="charts.js?v=attsync2"></script>
-  <script src="app.js?v=attsync2"></script>
+  <script src="data.js?v=sheetsonly1"></script>
+  <script src="lcr-map.js?v=sheetsonly1"></script>
+  <script src="summary.js?v=sheetsonly1"></script>
+  <script src="charts.js?v=sheetsonly1"></script>
+  <script src="app.js?v=sheetsonly1"></script>
 </body>
 </html>

@@ -1,12 +1,11 @@
 (() => {
   const STORAGE_KEY = "correlacion-distrito-v2";
   const SHEETS_CFG_KEY = "correlacion-distrito-sheets-cfg";
-  /** Config compartida: así la vista de rama ve las mismas asistencias que el distrito. */
+  /** Endpoint compartido: todas las vistas leen/escriben el mismo Sheets. */
   const DEFAULT_SHEETS_CFG = {
     url: "https://script.google.com/macros/s/AKfycbzuuhippetrKZWYCnlHxPnbXTmZnSUr0NMu0xKgp9ibyZNJfgiBzEqyvQ_mhlLOBJQY/exec",
     token: "cd-viedma-mR7k9x2",
     autosave: true,
-    loadOnOpen: true,
   };
 
   const els = {
@@ -42,22 +41,18 @@
     return JSON.parse(JSON.stringify(obj));
   }
 
+  function clearLocalReportCache() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(SHEETS_CFG_KEY);
+    } catch (_) {}
+  }
+
+  /** Solo placeholder en memoria hasta que llegue Sheets. No usa localStorage. */
   function loadState() {
-    const forceLcr =
-      typeof location !== "undefined" &&
-      (location.hash === "#from-lcr" ||
-        new URLSearchParams(location.search).get("lcr") === "1");
-    let report;
-    if (!forceLcr) {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) report = JSON.parse(raw);
-      } catch (_) {}
-    }
-    if (!report) {
-      report = clone(window.DEFAULT_REPORT);
-      report._seedDefault = true;
-    }
+    clearLocalReportCache();
+    const report = clone(window.DEFAULT_REPORT);
+    report._seedDefault = true;
     if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(report);
     return report;
   }
@@ -92,7 +87,8 @@
   }
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // Fuente de verdad: Google Sheets (nada de informe en localStorage).
+    clearLocalReportCache();
     scheduleSheetsSave();
   }
 
@@ -110,26 +106,21 @@
   }
 
   function loadSheetsCfg() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(SHEETS_CFG_KEY) || "{}") || {};
-      return { ...DEFAULT_SHEETS_CFG, ...saved };
-    } catch (_) {
-      return { ...DEFAULT_SHEETS_CFG };
-    }
+    // URL/token embebidos: no depender de config local que desincronice vistas.
+    return { ...DEFAULT_SHEETS_CFG };
   }
 
   function saveSheetsCfg(partial) {
-    const next = { ...loadSheetsCfg(), ...partial };
-    localStorage.setItem(SHEETS_CFG_KEY, JSON.stringify(next));
-    return next;
+    return { ...loadSheetsCfg(), ...partial };
   }
 
   function getSheetsCfgFromUi() {
     return {
-      url: String(els.sheetsUrl?.value || "").trim().replace(/\/$/, ""),
-      token: String(els.sheetsToken?.value || "").trim(),
+      url:
+        String(els.sheetsUrl?.value || "").trim().replace(/\/$/, "") ||
+        DEFAULT_SHEETS_CFG.url,
+      token: String(els.sheetsToken?.value || "").trim() || DEFAULT_SHEETS_CFG.token,
       autosave: els.sheetsAutosave?.checked !== false,
-      loadOnOpen: !!els.sheetsLoadOnOpen?.checked,
     };
   }
 
@@ -137,9 +128,6 @@
     if (els.sheetsUrl && cfg.url != null) els.sheetsUrl.value = cfg.url;
     if (els.sheetsToken && cfg.token != null) els.sheetsToken.value = cfg.token;
     if (els.sheetsAutosave && cfg.autosave != null) els.sheetsAutosave.checked = !!cfg.autosave;
-    if (els.sheetsLoadOnOpen && cfg.loadOnOpen != null) {
-      els.sheetsLoadOnOpen.checked = !!cfg.loadOnOpen;
-    }
   }
 
   function sheetsConfigured(cfg = getSheetsCfgFromUi()) {
@@ -232,41 +220,24 @@
       if (!data.report || !Array.isArray(data.report.units)) {
         throw new Error("La hoja no devolvió un informe válido.");
       }
-      // Conservar asistencia/tildes locales si Sheets aún no las tiene
-      // (evita que una vista vacíe la otra al abrir el link de rama).
-      const previousUnits = clone(state?.units || []);
-      const previousSummary = state?.summary ? clone(state.summary) : null;
-      const attBeforeSheets = countFilledAttendance(data.report);
       state = data.report;
       delete state._seedDefault;
-      mergeHandFieldsByName(previousUnits, state);
-      if (previousSummary && !state.summary) state.summary = previousSummary;
-      else if (previousSummary && state.summary) {
-        // no pisar resumen local vacío sobre uno lleno — ensureSummary ya alinea claves
-      }
       recomputeBaptismsFromMembers(state);
       recomputeGoalDones(state);
       if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(state);
-      const kept = state._mergeMeta?.kept || 0;
-      const attAfterMerge = countFilledAttendance(state);
       suppressSheetsSave = true;
       try {
-        saveState();
+        clearLocalReportCache();
         refresh();
       } finally {
         suppressSheetsSave = false;
       }
       setSheetsStatus(
         `Cargado desde Sheets · ${state.units.length} unidades, ` +
-          `${state.units.reduce((n, u) => n + (u.members || []).length, 0)} personas` +
-          (kept ? ` · ${kept} filas con datos locales` : "") +
-          "."
+          `${state.units.reduce((n, u) => n + (u.members || []).length, 0)} personas · ` +
+          `${countFilledAttendance(state)} con asistencia.`
       );
       setStatus("Datos cargados desde Google Sheets.");
-      // Si este navegador tenía asistencias que Sheets no, subirlas para las otras vistas.
-      if (attAfterMerge > attBeforeSheets) {
-        scheduleSheetsSave(600);
-      }
       return true;
     } catch (err) {
       setSheetsStatus(`No se pudo cargar: ${err.message || err}`);
@@ -2204,24 +2175,13 @@
 
     applySheetsCfgToUi(loadSheetsCfg());
 
-    const persistSheetsFields = () => {
-      saveSheetsCfg(getSheetsCfgFromUi());
-    };
-    els.sheetsUrl?.addEventListener("change", persistSheetsFields);
-    els.sheetsUrl?.addEventListener("blur", persistSheetsFields);
-    els.sheetsToken?.addEventListener("change", persistSheetsFields);
-    els.sheetsToken?.addEventListener("blur", persistSheetsFields);
     els.sheetsAutosave?.addEventListener("change", () => {
-      persistSheetsFields();
       if (els.sheetsAutosave.checked) scheduleSheetsSave(400);
     });
-    els.sheetsLoadOnOpen?.addEventListener("change", persistSheetsFields);
     document.getElementById("btnSheetsSave")?.addEventListener("click", () => {
-      persistSheetsFields();
       saveToSheets({ silent: false });
     });
     document.getElementById("btnSheetsLoad")?.addEventListener("click", () => {
-      persistSheetsFields();
       loadFromSheets();
     });
 
@@ -2234,59 +2194,40 @@
       setImportStatus("Pegá el JSON (botón Pegar JSON) o elegí lcr-export.json.");
     }
     if (location.hash === "#from-lcr-attendance") {
-      setImportStatus("Leyendo asistencia del portapapeles…");
+      setImportStatus("Esperando Sheets para pegar asistencia…");
       openConfigModal();
-      importAttendanceFromClipboard();
     }
 
-    // Carga automática: Sheets (compartido) → localStorage → seed del repo
+    // Siempre Sheets. El informe no se guarda en el navegador.
     (async () => {
+      clearLocalReportCache();
+      setStatus("Cargando desde Google Sheets…");
       const cfg = getSheetsCfgFromUi();
-      let loadedFromSheets = false;
-      if (cfg.loadOnOpen && sheetsConfigured(cfg)) {
-        loadedFromSheets = await loadFromSheets();
-        if (loadedFromSheets) return;
+      if (sheetsConfigured(cfg)) {
+        const ok = await loadFromSheets();
+        if (ok) {
+          if (location.hash === "#from-lcr-attendance") {
+            setImportStatus("Leyendo asistencia del portapapeles…");
+            importAttendanceFromClipboard();
+          }
+          return;
+        }
       }
 
-      // Vista con asistencias locales + Sheets configurado: subir para que
-      // el link de rama vea lo mismo (aunque loadOnOpen esté apagado).
-      if (
-        !loadedFromSheets &&
-        sheetsConfigured(cfg) &&
-        countFilledAttendance(state) > 0
-      ) {
-        await saveToSheets({ silent: true });
-      }
-
+      setStatus("No se pudo cargar Sheets. Probá de nuevo o usá Cargar.");
       const forceLcr =
         location.hash === "#from-lcr" ||
         new URLSearchParams(location.search).get("lcr") === "1";
-      const hasStored = !!localStorage.getItem(STORAGE_KEY);
-      // No reimportar en cada visita a GitHub Pages: eso pisaba asistencias
-      // y mezclaba datos demo (p. ej. 3/6 de Arregui) en la vista de rama.
-      if (hasStored && !forceLcr && !isSeedDefaultReport(state)) return;
+      if (!forceLcr) return;
 
       try {
         const jsonRes = await fetch("lcr-export.json", { cache: "no-store" });
         if (jsonRes.ok) {
           const payload = await jsonRes.json();
           if (payload?.units) {
-            applyLcrPayload(payload, {
-              skipHandMerge: forceLcr || isSeedDefaultReport(state),
-            });
-            if (sheetsConfigured(cfg) && countFilledAttendance(state) > 0) {
-              scheduleSheetsSave(800);
-            }
-            return;
+            applyLcrPayload(payload, { skipHandMerge: true });
+            if (sheetsConfigured(cfg)) scheduleSheetsSave(800);
           }
-        }
-      } catch (_) {}
-
-      try {
-        const csvRes = await fetch("tabla_exportada.csv", { cache: "no-store" });
-        if (csvRes.ok) {
-          const text = await csvRes.text();
-          await importFromText(text);
         }
       } catch (_) {}
     })();
