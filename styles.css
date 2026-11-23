@@ -826,6 +826,11 @@ span.att-high {
     linear-gradient(160deg, #1a2b35, #0d171d 50%, #132028);
 }
 
+/* display:grid arriba gana al UA [hidden]; sin esto la puerta tapa el informe con ?d= */
+.access-gate[hidden] {
+  display: none !important;
+}
+
 .access-gate__card {
   width: min(420px, 100%);
   padding: 1.25rem 1.2rem 1.4rem;
