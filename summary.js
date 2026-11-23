@@ -206,7 +206,6 @@
     const ramaParam = q.get("rama");
     const v = String(q.get("v") || "").trim();
     const d = String(q.get("d") || q.get("distrito") || "").trim();
-    const vista = String(q.get("vista") || "").trim().toLowerCase();
     const districtToken = String(
       access.districtView || DEFAULT_ACCESS.districtView || ""
     ).trim();
