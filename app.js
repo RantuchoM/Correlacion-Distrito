@@ -211,6 +211,16 @@
     }
   }
 
+  function countFilledAttendance(report = state) {
+    let n = 0;
+    for (const unit of report?.units || []) {
+      for (const member of unit.members || []) {
+        if (String(member.attendance || "").trim()) n += 1;
+      }
+    }
+    return n;
+  }
+
   async function loadFromSheets() {
     if (!sheetsConfigured()) {
       setSheetsStatus("Configurá URL y token para cargar desde Sheets.");
@@ -222,11 +232,23 @@
       if (!data.report || !Array.isArray(data.report.units)) {
         throw new Error("La hoja no devolvió un informe válido.");
       }
+      // Conservar asistencia/tildes locales si Sheets aún no las tiene
+      // (evita que una vista vacíe la otra al abrir el link de rama).
+      const previousUnits = clone(state?.units || []);
+      const previousSummary = state?.summary ? clone(state.summary) : null;
+      const attBeforeSheets = countFilledAttendance(data.report);
       state = data.report;
       delete state._seedDefault;
+      mergeHandFieldsByName(previousUnits, state);
+      if (previousSummary && !state.summary) state.summary = previousSummary;
+      else if (previousSummary && state.summary) {
+        // no pisar resumen local vacío sobre uno lleno — ensureSummary ya alinea claves
+      }
       recomputeBaptismsFromMembers(state);
       recomputeGoalDones(state);
       if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(state);
+      const kept = state._mergeMeta?.kept || 0;
+      const attAfterMerge = countFilledAttendance(state);
       suppressSheetsSave = true;
       try {
         saveState();
@@ -236,9 +258,15 @@
       }
       setSheetsStatus(
         `Cargado desde Sheets · ${state.units.length} unidades, ` +
-          `${state.units.reduce((n, u) => n + (u.members || []).length, 0)} personas.`
+          `${state.units.reduce((n, u) => n + (u.members || []).length, 0)} personas` +
+          (kept ? ` · ${kept} filas con datos locales` : "") +
+          "."
       );
       setStatus("Datos cargados desde Google Sheets.");
+      // Si este navegador tenía asistencias que Sheets no, subirlas para las otras vistas.
+      if (attAfterMerge > attBeforeSheets) {
+        scheduleSheetsSave(600);
+      }
       return true;
     } catch (err) {
       setSheetsStatus(`No se pudo cargar: ${err.message || err}`);
@@ -2214,9 +2242,20 @@
     // Carga automática: Sheets (compartido) → localStorage → seed del repo
     (async () => {
       const cfg = getSheetsCfgFromUi();
+      let loadedFromSheets = false;
       if (cfg.loadOnOpen && sheetsConfigured(cfg)) {
-        const ok = await loadFromSheets();
-        if (ok) return;
+        loadedFromSheets = await loadFromSheets();
+        if (loadedFromSheets) return;
+      }
+
+      // Vista con asistencias locales + Sheets configurado: subir para que
+      // el link de rama vea lo mismo (aunque loadOnOpen esté apagado).
+      if (
+        !loadedFromSheets &&
+        sheetsConfigured(cfg) &&
+        countFilledAttendance(state) > 0
+      ) {
+        await saveToSheets({ silent: true });
       }
 
       const forceLcr =
@@ -2235,6 +2274,9 @@
             applyLcrPayload(payload, {
               skipHandMerge: forceLcr || isSeedDefaultReport(state),
             });
+            if (sheetsConfigured(cfg) && countFilledAttendance(state) > 0) {
+              scheduleSheetsSave(800);
+            }
             return;
           }
         }
