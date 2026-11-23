@@ -1225,6 +1225,34 @@
     refresh();
   }
 
+  /** Deja la barra de direcciones alineada con el acceso (p. ej. ?d=dv1). */
+  function syncAccessUrl(next) {
+    const url = new URL(location.href);
+    url.searchParams.delete("rama");
+    url.searchParams.delete("v");
+    url.searchParams.delete("d");
+    url.searchParams.delete("distrito");
+    if (next?.mode === "district") {
+      const token = String(
+        accessCfg?.districtView ||
+          window.CorrelacionSummary?.DEFAULT_ACCESS?.districtView ||
+          ""
+      ).trim();
+      if (token) url.searchParams.set("d", token);
+    } else if (next?.mode === "rama" && next.rama) {
+      const view = String(accessCfg?.ramas?.[next.rama]?.view || "").trim();
+      if (view) {
+        url.searchParams.set("rama", next.rama);
+        url.searchParams.set("v", view);
+      }
+    }
+    const nextSearch = url.searchParams.toString();
+    const target = url.pathname + (nextSearch ? `?${nextSearch}` : "") + url.hash;
+    if (target !== location.pathname + location.search + location.hash) {
+      history.replaceState(null, "", target);
+    }
+  }
+
   function renderAccessGateLinks() {
     /* Los links de rama viven en Google Sheets (pestaña Acceso), no en la landing. */
   }
@@ -1994,7 +2022,7 @@
       }
     });
 
-    document.getElementById("btnGateDistrict")?.addEventListener("click", () => {
+    const tryGateDistrict = () => {
       const token = String(document.getElementById("gateDistrictToken")?.value || "").trim();
       const gateStatus = document.getElementById("gateStatus");
       const expected = String(
@@ -2006,9 +2034,18 @@
         if (gateStatus) gateStatus.textContent = "Clave de distrito incorrecta.";
         return;
       }
-      enterSession({ mode: "district", rama: null, canEdit: false, via: "gate" });
+      const next = { mode: "district", rama: null, canEdit: false, via: "gate" };
+      syncAccessUrl(next);
+      enterSession(next);
       if (gateStatus) gateStatus.textContent = "";
       setStatus("Vista distrito (solo lectura). Usá Editar (PIN) para cambiar datos.");
+    };
+    document.getElementById("btnGateDistrict")?.addEventListener("click", tryGateDistrict);
+    document.getElementById("gateDistrictToken")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        tryGateDistrict();
+      }
     });
 
     document.getElementById("btnUnlockEdit")?.addEventListener("click", () => {
