@@ -768,6 +768,40 @@ summary {
 .col-asistencia .row-dato {
   min-width: 4.5rem;
   text-align: center;
+  font-weight: 700;
+}
+
+/* Asistencia: 0 rojo · 1–2 naranja · 3–4 amarillo · 5–6 verde */
+.att-0 {
+  background: #f8d9dc !important;
+  color: #a11f2c !important;
+  border-color: #e2a4ab !important;
+}
+.att-low {
+  background: #fde6d4 !important;
+  color: #b85a12 !important;
+  border-color: #efc09a !important;
+}
+.att-mid {
+  background: #f7ecd0 !important;
+  color: #8a6d1d !important;
+  border-color: #e2d09a !important;
+}
+.att-high {
+  background: #d8f3e4 !important;
+  color: #1f7a4c !important;
+  border-color: #9fd4b6 !important;
+}
+
+span.att-0,
+span.att-low,
+span.att-mid,
+span.att-high {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 700;
+  border: 1px solid transparent;
 }
 
 .col-dato {

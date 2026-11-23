@@ -675,10 +675,10 @@
     const m = String(value || "").match(/(\d+)\s*\/\s*(\d+)/);
     if (!m) return "";
     const a = Number(m[1]);
-    const b = Number(m[2]) || 1;
-    if (a === 0) return "status--no";
-    if (a / b >= 0.5) return "status--si";
-    return "status--pend";
+    if (a <= 0) return "att-0";
+    if (a <= 2) return "att-low";
+    if (a <= 4) return "att-mid";
+    return "att-high"; // 5 o 6 (o más)
   }
 
   function deltaClass(n) {
@@ -807,7 +807,7 @@
               <td class="col-asistencia">
                 <input
                   type="text"
-                  class="row-dato no-print"
+                  class="row-dato no-print ${m.attendance ? attendanceClass(m.attendance) : ""}"
                   data-field="attendance"
                   value="${escapeHtml(m.attendance || "")}"
                   placeholder="Asist…"
@@ -999,12 +999,12 @@
             if (printEl) printEl.textContent = input.value;
           }
           if (field === "attendance") {
+            const cls = input.value ? attendanceClass(input.value) : "";
+            input.className = `row-dato no-print ${cls}`.trim();
             const printEl = input.closest("td")?.querySelector(".dato-print");
             if (printEl) {
               printEl.textContent = input.value;
-              printEl.className = `dato-print only-print ${
-                input.value ? attendanceClass(input.value) : ""
-              }`;
+              printEl.className = `dato-print only-print ${cls}`.trim();
             }
           }
         };
