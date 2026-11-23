@@ -850,7 +850,7 @@
             const assignOn = isCheckedValue(m.assignment);
             const reportOn = isCheckedValue(m.report);
             return `<tr data-unit-index="${ui}" data-member-index="${mi}">
-              <td>${escapeHtml(m.name)}</td>
+              <td class="col-nombre">${escapeHtml(m.name)}</td>
               <td>${escapeHtml(m.baptism || "")}</td>
               <td>${escapeHtml(age)}</td>
               <td>${escapeHtml(sex)}</td>
@@ -896,7 +896,7 @@
               <table class="members-table js-interactive-table">
                 <thead>
                   <tr>
-                    ${sortHeader("Nombre")}
+                    ${sortHeader("Nombre", { className: "col-nombre" })}
                     ${sortHeader("Fecha bautismo", { type: "date", filter: "date" })}
                     ${sortHeader("Edad", { type: "num", filter: "num" })}
                     ${sortHeader("Sexo")}

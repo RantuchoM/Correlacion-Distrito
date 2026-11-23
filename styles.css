@@ -538,9 +538,16 @@ summary {
 
 .stats-table td:first-child,
 .summary-table td:first-child,
-.members-table td:first-child {
+.members-table td:first-child,
+.members-table td.col-nombre {
   text-align: left;
   font-weight: 600;
+}
+
+.members-table th.col-nombre,
+.members-table td.col-nombre {
+  min-width: 7.5rem;
+  max-width: 11rem;
 }
 
 .delta-pos { background: var(--ok-bg); color: var(--ok); font-weight: 700; }
@@ -1007,12 +1014,12 @@ body.access-readonly .goal-input {
 
 @media (max-width: 720px) {
   .preview-wrap {
-    padding: 0.65rem 0.65rem 1.5rem;
+    padding: 0.35rem 0.35rem 1.1rem;
   }
 
   .preview-toolbar {
-    gap: 0.45rem;
-    margin-bottom: 0.65rem;
+    gap: 0.35rem;
+    margin-bottom: 0.45rem;
   }
 
   .preview-toolbar__brand {
@@ -1025,61 +1032,85 @@ body.access-readonly .goal-input {
 
   .preview-toolbar__actions .btn {
     flex: 1 1 calc(50% - 0.3rem);
-    min-height: 2.55rem;
+    min-height: 2.45rem;
     justify-content: center;
   }
 
   .preview-toolbar__status {
     flex: 1 1 100%;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
 
   .report {
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .page--cover {
-    padding: 1rem 1.1rem;
+    padding: 0.75rem 0.85rem;
   }
 
   .page--cover::after {
-    width: 52px;
-    height: 52px;
-    inset: auto 0.75rem 50% auto;
+    width: 44px;
+    height: 44px;
+    inset: auto 0.55rem 50% auto;
   }
 
   .cover__title {
-    font-size: clamp(1.55rem, 7vw, 2rem);
+    font-size: clamp(1.45rem, 7vw, 1.9rem);
     max-width: none;
   }
 
   .cover__period {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
   }
 
   .page__body {
-    padding: 1rem 0.9rem 1.15rem;
+    padding: 0.7rem 0.55rem 0.85rem;
   }
 
   .page__title {
-    font-size: 1.25rem;
-    margin-bottom: 0.75rem;
+    font-size: 1.15rem;
+    margin-bottom: 0.5rem;
   }
 
   .table-scroll {
-    margin: 0 -0.15rem;
+    margin: 0 -0.35rem;
+    padding: 0 0.05rem;
     -webkit-overflow-scrolling: touch;
   }
 
   .members-table,
   .stats-table,
   .summary-table {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
   }
 
   .members-table th,
   .members-table td {
-    padding: 0.4rem 0.35rem;
+    padding: 0.32rem 0.28rem;
+  }
+
+  /* Nombre fijo al scrollear horizontal (separate borders: sticky fiable) */
+  .members-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .members-table th.col-nombre,
+  .members-table td.col-nombre {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    box-shadow: 4px 0 8px rgba(20, 33, 43, 0.12);
+  }
+
+  .members-table th.col-nombre {
+    z-index: 3;
+    background: var(--brand);
+  }
+
+  .members-table td.col-nombre {
+    background: var(--card);
   }
 
   .modal {
