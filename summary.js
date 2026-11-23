@@ -216,10 +216,6 @@
     if (dMatch) {
       return { mode: "district", rama: null, canEdit: false, via: "url-district" };
     }
-    // Compat: ?vista=distrito&d=…
-    if (vista === "distrito" && dMatch) {
-      return { mode: "district", rama: null, canEdit: false, via: "url-district" };
-    }
 
     if (ramaParam && v) {
       const ramas = access.ramas || {};
