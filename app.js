@@ -246,7 +246,7 @@
     return data;
   }
 
-  async function saveToSheets({ silent = false } = {}) {
+  async function saveToSheets({ silent = false, allowWithoutEdit = false } = {}) {
     if (!sheetsConfigured()) {
       if (!silent) setSheetsStatus("Configurá URL y token para guardar en Sheets.");
       return false;
@@ -256,8 +256,8 @@
       if (!silent) setSheetsStatus("Todavía no hay informe real para guardar (esperá a Sheets).");
       return false;
     }
-    // Solo lectura: no escribe. Evita que un link de rama sobrescriba Sheets.
-    if (!canEdit()) {
+    // Solo lectura: no escribe (salvo pegado explícito de asistencia Progress Record).
+    if (!canEdit() && !allowWithoutEdit) {
       if (!silent) setSheetsStatus("Vista solo lectura: no se guarda en Sheets.");
       return false;
     }
@@ -453,8 +453,17 @@
       }
     }
 
-    refresh();
-    scheduleSheetsSave(600);
+    // Pintá sin depender del autosave (que en solo lectura no corre).
+    suppressSheetsSave = true;
+    try {
+      refresh();
+    } finally {
+      suppressSheetsSave = false;
+    }
+    // Persistí sí o sí: el pegado de asistencia es una escritura intencional.
+    clearTimeout(sheetsSaveTimer);
+    sheetsSaveTimer = null;
+    saveToSheets({ silent: false, allowWithoutEdit: true });
     const missNote =
       unmatched.length > 0
         ? ` · ${unmatched.length} sin match` +
@@ -2277,13 +2286,15 @@
         new URLSearchParams(location.search).get("lcr") === "1";
       if (!forceLcr) return;
 
+      // Fallback solo para ver en local si Sheets falló. Nunca subir esto:
+      // lcr-export no trae asistencia y pisaría Sheets.
       try {
         const jsonRes = await fetch("lcr-export.json", { cache: "no-store" });
         if (jsonRes.ok) {
           const payload = await jsonRes.json();
           if (payload?.units) {
             applyLcrPayload(payload, { skipHandMerge: true });
-            if (sheetsConfigured(cfg)) scheduleSheetsSave(800);
+            setStatus("Vista local de respaldo (no se guardó en Sheets).");
           }
         }
       } catch (_) {}
