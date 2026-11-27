@@ -938,6 +938,67 @@
     return "att-high"; // 5 o 6 (o más)
   }
 
+  function formatSundayShort(iso) {
+    const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(iso || "");
+    return `${m[3]}/${m[2]}`;
+  }
+
+  function memberAttendanceLog(member) {
+    const log =
+      member?.attendanceByDate && typeof member.attendanceByDate === "object"
+        ? member.attendanceByDate
+        : null;
+    if (!log || !Object.keys(log).length) return null;
+    return log;
+  }
+
+  function attendanceCellHtml(member) {
+    syncMemberAttendanceDisplay(member);
+    const ratio = String(member?.attendance || "").trim();
+    const cls = ratio ? attendanceClass(ratio) : "";
+    const log = memberAttendanceLog(member);
+    const weeks = lastNSundayKeys(6);
+
+    if (log) {
+      const rows = weeks
+        .map((iso) => {
+          const yes = log[iso] === true;
+          return `<li class="att-popover__row">
+            <span class="att-popover__date">${escapeHtml(formatSundayShort(iso))}</span>
+            <span class="att-popover__mark ${yes ? "is-yes" : "is-no"}">${yes ? "Sí" : "No"}</span>
+          </li>`;
+        })
+        .join("");
+      return `<div class="att-wrap">
+        <button type="button" class="att-chip att-chip--btn no-print ${cls}" data-att-toggle aria-expanded="false" title="Ver asistencia por domingo">
+          ${escapeHtml(ratio || "0/6")}
+        </button>
+        <span class="dato-print only-print ${cls}">${escapeHtml(ratio || "")}</span>
+        <div class="att-popover" hidden role="dialog" aria-label="Asistencia por domingo">
+          <p class="att-popover__title">Últimos 6 domingos</p>
+          <ul class="att-popover__list">${rows}</ul>
+        </div>
+      </div>`;
+    }
+
+    if (canEdit()) {
+      return `<input
+        type="text"
+        class="row-dato no-print ${cls}"
+        data-field="attendance"
+        value="${escapeHtml(ratio)}"
+        placeholder="0/6"
+      />
+      <span class="dato-print only-print ${cls}">${escapeHtml(ratio)}</span>`;
+    }
+
+    if (ratio) {
+      return `<span class="att-chip ${cls}" title="Sin detalle por domingo">${escapeHtml(ratio)}</span>`;
+    }
+    return `<span class="att-empty muted">—</span>`;
+  }
+
   function deltaClass(n) {
     if (n > 0) return "delta-pos";
     if (n < 0) return "delta-neg";
@@ -1068,23 +1129,7 @@
               <td>${escapeHtml(m.baptism || "")}</td>
               <td>${escapeHtml(age)}</td>
               <td>${escapeHtml(sex)}</td>
-              <td class="col-asistencia">
-                ${
-                  canEdit()
-                    ? `<input
-                  type="text"
-                  class="row-dato no-print ${m.attendance ? attendanceClass(m.attendance) : ""}"
-                  data-field="attendance"
-                  value="${escapeHtml(m.attendance || "")}"
-                  placeholder="0/6"
-                  ${editAttr}
-                />
-                <span class="dato-print only-print ${m.attendance ? attendanceClass(m.attendance) : ""}">${escapeHtml(m.attendance || "")}</span>`
-                    : m.attendance
-                      ? `<span class="att-chip ${attendanceClass(m.attendance)}">${escapeHtml(m.attendance)}</span>`
-                      : `<span class="att-empty muted">—</span>`
-                }
-              </td>
+              <td class="col-asistencia">${attendanceCellHtml(m)}</td>
               <td>${statusChip(m.temple)}</td>
               <td>${statusChip(m.calling)}</td>
               <td class="col-asignacion">
@@ -1248,6 +1293,7 @@
 
     wireInteractiveTables(els.report);
     wireRowEditors(els.report);
+    wireAttendancePopovers(els.report);
     wireGoalEditors(els.report);
     wireSummaryChips(els.report);
     applyAccessChrome();
@@ -1498,6 +1544,81 @@
       input.addEventListener("change", commit);
       input.addEventListener("blur", commit);
     });
+  }
+
+  function closeAttendancePopovers(except) {
+    document.querySelectorAll(".att-wrap.is-open").forEach((wrap) => {
+      if (except && wrap === except) return;
+      wrap.classList.remove("is-open");
+      const btn = wrap.querySelector("[data-att-toggle]");
+      const pop = wrap.querySelector(".att-popover");
+      if (btn) btn.setAttribute("aria-expanded", "false");
+      if (pop) {
+        pop.hidden = true;
+        pop.style.top = "";
+        pop.style.left = "";
+      }
+    });
+  }
+
+  function placeAttendancePopover(btn, pop) {
+    const r = btn.getBoundingClientRect();
+    pop.hidden = false;
+    pop.style.top = `${Math.round(r.bottom + 6)}px`;
+    pop.style.left = `${Math.round(r.left + r.width / 2)}px`;
+    const pr = pop.getBoundingClientRect();
+    let left = r.left + r.width / 2;
+    const pad = 8;
+    if (left - pr.width / 2 < pad) left = pad + pr.width / 2;
+    if (left + pr.width / 2 > window.innerWidth - pad) {
+      left = window.innerWidth - pad - pr.width / 2;
+    }
+    let top = r.bottom + 6;
+    if (top + pr.height > window.innerHeight - pad) {
+      top = Math.max(pad, r.top - pr.height - 6);
+    }
+    pop.style.top = `${Math.round(top)}px`;
+    pop.style.left = `${Math.round(left)}px`;
+  }
+
+  function wireAttendancePopovers(root) {
+    if (!root || root.dataset.attPopBound) return;
+    root.dataset.attPopBound = "1";
+    root.addEventListener("click", (e) => {
+      const btn = e.target.closest?.("[data-att-toggle]");
+      if (!btn || !root.contains(btn)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const wrap = btn.closest(".att-wrap");
+      if (!wrap) return;
+      const open = !wrap.classList.contains("is-open");
+      closeAttendancePopovers(wrap);
+      wrap.classList.toggle("is-open", open);
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      const pop = wrap.querySelector(".att-popover");
+      if (!pop) return;
+      if (open) placeAttendancePopover(btn, pop);
+      else {
+        pop.hidden = true;
+        pop.style.top = "";
+        pop.style.left = "";
+      }
+    });
+    if (!document.documentElement.dataset.attPopDocBound) {
+      document.documentElement.dataset.attPopDocBound = "1";
+      document.addEventListener("click", (e) => {
+        if (e.target.closest?.(".att-wrap")) return;
+        closeAttendancePopovers();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeAttendancePopovers();
+      });
+      window.addEventListener(
+        "scroll",
+        () => closeAttendancePopovers(),
+        true
+      );
+    }
   }
 
   function wireRowEditors(root) {

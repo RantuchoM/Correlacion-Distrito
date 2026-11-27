@@ -846,6 +846,92 @@ summary {
   text-align: center;
 }
 
+.att-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.att-chip--btn {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.2;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.att-chip--btn:hover,
+.att-chip--btn:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 2px rgba(31, 122, 76, 0.18);
+  outline: none;
+}
+
+.att-wrap.is-open .att-chip--btn {
+  box-shadow: 0 0 0 2px rgba(31, 122, 76, 0.28);
+}
+
+.att-popover {
+  position: fixed;
+  z-index: 80;
+  top: 0;
+  left: 0;
+  transform: translateX(-50%);
+  min-width: 9.5rem;
+  padding: 0.55rem 0.65rem 0.5rem;
+  border-radius: 0.65rem;
+  border: 1px solid #d7dde6;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(20, 30, 45, 0.16);
+  text-align: left;
+}
+
+.att-popover__title {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #6b7785;
+}
+
+.att-popover__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.att-popover__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+.att-popover__date {
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.att-popover__mark {
+  font-weight: 700;
+  min-width: 1.4rem;
+  text-align: right;
+}
+
+.att-popover__mark.is-yes {
+  color: #1f7a4c;
+}
+
+.att-popover__mark.is-no {
+  color: #a11f2c;
+}
+
 .att-empty {
   font-size: 0.85rem;
 }
@@ -1216,5 +1302,6 @@ body.access-readonly .goal-input {
   .table-scroll { overflow: visible !important; }
   .members-table { font-size: 9pt; }
   .summary-chip { display: none !important; }
+  .att-popover { display: none !important; }
   .access-gate { display: none !important; }
 }
