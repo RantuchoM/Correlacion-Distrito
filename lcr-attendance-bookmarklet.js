@@ -2,6 +2,7 @@
  * Extrae asistencia sacramental de Miembros nuevos (Progress Record)
  * para las 4 ramas del Distrito Viedma y la exporta a Correlación.
  *
+ * Exporta cada domingo (dateString + attended) para acumular historial.
  * Usar en: https://lcr.churchofjesuschrist.org/one-work/progress-record?...
  */
 (async function exportLcrAttendanceDistrict() {
@@ -18,17 +19,33 @@
     "http://127.0.0.1:8765/#from-lcr-attendance",
   ];
 
-  function attendanceRatio(list) {
-    const weeks = Array.isArray(list) ? list : [];
+  function mapWeeks(list) {
+    return (Array.isArray(list) ? list : [])
+      .map((w) => {
+        const date = String(
+          w?.dateString || String(w?.date || "").slice(0, 10) || ""
+        ).trim();
+        return {
+          date,
+          attended: !!(w && w.attended === true),
+          dateDisplay: String(w?.dateDisplay || "").trim(),
+        };
+      })
+      .filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w.date));
+  }
+
+  function attendanceRatio(weeks) {
     if (!weeks.length) return "";
-    const attended = weeks.filter((w) => w && w.attended === true).length;
+    const attended = weeks.filter((w) => w.attended).length;
     return `${attended}/${weeks.length}`;
   }
 
   function mapMember(m) {
+    const weeks = mapWeeks(m.sacramentMeetingAttendanceList);
     return {
       name: String(m.name || "").trim(),
-      attendance: attendanceRatio(m.sacramentMeetingAttendanceList),
+      weeks,
+      attendance: attendanceRatio(weeks),
       weeksSinceLastAttendance: m.weeksSinceLastAttendance,
       memberSince: m.memberSinceDisplayString || "",
       isConvert: "Sí",
@@ -78,13 +95,23 @@
     return;
   }
 
+  const weekDates = [
+    ...new Set(
+      units.flatMap((u) =>
+        u.members.flatMap((m) => (m.weeks || []).map((w) => w.date))
+      )
+    ),
+  ].sort();
+
   const payload = {
     source: "lcr-progress-attendance",
     kind: "attendance",
+    version: 2,
     scrapedAt: new Date().toISOString(),
     url: location.href,
     unitInfo: DISTRICT.name,
     districtUnitNumber: DISTRICT.unitNumber,
+    weekDates,
     units,
     errors,
   };
@@ -106,13 +133,16 @@
   } catch (_) {}
 
   const total = units.reduce((n, u) => n + u.members.length, 0);
-  const withAtt = units.reduce(
-    (n, u) => n + u.members.filter((m) => m.attendance).length,
+  const withWeeks = units.reduce(
+    (n, u) => n + u.members.filter((m) => (m.weeks || []).length).length,
     0
   );
   const summary =
     `Asistencia: ${units.length} ramas, ${total} miembros nuevos` +
-    ` (${withAtt} con ratio).` +
+    ` (${withWeeks} con semanas).` +
+    (weekDates.length
+      ? `\nVentana LCR: ${weekDates[0]} → ${weekDates[weekDates.length - 1]} (${weekDates.length} domingos).`
+      : "") +
     (copied ? "\nJSON copiado al portapapeles." : "") +
     "\nSe descargó lcr-attendance.json." +
     (errors.length ? `\nAvisos:\n- ${errors.join("\n- ")}` : "");

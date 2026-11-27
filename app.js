@@ -320,6 +320,7 @@
         console.warn("Sheets devolvió el informe de ejemplo (_seedDefault).");
       }
       delete state._seedDefault;
+      syncAllAttendanceDisplays(state);
       recomputeBaptismsFromMembers(state);
       recomputeGoalDones(state);
       if (window.CorrelacionSummary) window.CorrelacionSummary.ensureSummary(state);
@@ -411,9 +412,57 @@
     );
   }
 
+  /** Últimos N domingos (incluye el próximo / el de hoy si es domingo), como LCR. */
+  function lastNSundayKeys(n = 6, from = new Date()) {
+    const d = new Date(
+      Date.UTC(from.getFullYear(), from.getMonth(), from.getDate())
+    );
+    const day = d.getUTCDay();
+    const add = day === 0 ? 0 : 7 - day;
+    d.setUTCDate(d.getUTCDate() + add);
+    const out = [];
+    for (let i = 0; i < n; i += 1) {
+      const x = new Date(d.getTime());
+      x.setUTCDate(d.getUTCDate() - i * 7);
+      out.push(x.toISOString().slice(0, 10));
+    }
+    return out;
+  }
+
+  function attendanceRatioFromLog(byDate, n = 6) {
+    const weeks = lastNSundayKeys(n);
+    let done = 0;
+    for (const iso of weeks) {
+      if (byDate && byDate[iso] === true) done += 1;
+    }
+    return `${done}/${n}`;
+  }
+
+  function syncMemberAttendanceDisplay(member) {
+    if (!member) return member;
+    if (
+      member.attendanceByDate &&
+      typeof member.attendanceByDate === "object" &&
+      Object.keys(member.attendanceByDate).length
+    ) {
+      member.attendance = attendanceRatioFromLog(member.attendanceByDate, 6);
+    }
+    return member;
+  }
+
+  function syncAllAttendanceDisplays(report = state) {
+    for (const unit of report?.units || []) {
+      for (const member of unit.members || []) {
+        syncMemberAttendanceDisplay(member);
+      }
+    }
+    return report;
+  }
+
   /**
-   * Aplica solo asistencia (Progress Record) sobre el informe actual,
-   * emparejando por rama + nombre (tolera orden apellido/nombre).
+   * Aplica asistencia (Progress Record) sobre el informe actual.
+   * Si vienen semanas fechadas, acumula en attendanceByDate (LCR pisa esos domingos).
+   * Si solo viene ratio legacy (5/6), reemplaza el texto como antes.
    */
   function applyAttendanceOverlay(payload) {
     if (!isAttendancePayload(payload)) {
@@ -428,14 +477,16 @@
     const { byUnitKey, byKey } = indexMembersByMatchKey(state.units);
     let matched = 0;
     let updated = 0;
+    let weekWrites = 0;
     const unmatched = [];
 
     for (const unit of payload.units || []) {
       for (const incoming of unit.members || []) {
         const key = nameMatchKey(incoming.name);
         if (!key) continue;
+        const weeks = Array.isArray(incoming.weeks) ? incoming.weeks : [];
         const att = String(incoming.attendance || "").trim();
-        if (!att) continue;
+        if (!weeks.length && !att) continue;
         const unitKey = window.CorrelacionSummary
           ? window.CorrelacionSummary.normUnit(unit.name)
           : normName(unit.name);
@@ -446,10 +497,31 @@
           continue;
         }
         matched += 1;
-        if (String(target.attendance || "").trim() !== att) {
+        let changed = false;
+
+        if (weeks.length) {
+          if (!target.attendanceByDate || typeof target.attendanceByDate !== "object") {
+            target.attendanceByDate = {};
+          }
+          for (const w of weeks) {
+            const iso = String(w?.date || "").trim().slice(0, 10);
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) continue;
+            const next = !!w.attended;
+            if (target.attendanceByDate[iso] !== next) {
+              target.attendanceByDate[iso] = next;
+              changed = true;
+            }
+            weekWrites += 1;
+          }
+          const prevRatio = String(target.attendance || "").trim();
+          syncMemberAttendanceDisplay(target);
+          if (prevRatio !== String(target.attendance || "").trim()) changed = true;
+        } else if (att && String(target.attendance || "").trim() !== att) {
           target.attendance = att;
-          updated += 1;
+          changed = true;
         }
+
+        if (changed) updated += 1;
       }
     }
 
@@ -469,13 +541,15 @@
         ? ` · ${unmatched.length} sin match` +
           (unmatched.length <= 5 ? ` (${unmatched.join("; ")})` : "")
         : "";
+    const weekNote = weekWrites ? ` · ${weekWrites} celdas domingo` : "";
     setImportStatus(
       `Asistencia aplicada: ${updated} actualizados, ${matched} encontrados` +
+        weekNote +
         missNote +
         "."
     );
-    setStatus("Asistencia de LCR fusionada.");
-    return { matched, updated, unmatched };
+    setStatus("Asistencia de LCR fusionada (acumulable por domingo).");
+    return { matched, updated, unmatched, weekWrites };
   }
 
   // Campos que el usuario edita a mano: se conservan al reimportar LCR/CSV.
@@ -503,6 +577,18 @@
             member[field] = prev[field];
             touched = true;
           }
+        }
+        if (
+          prev.attendanceByDate &&
+          typeof prev.attendanceByDate === "object" &&
+          Object.keys(prev.attendanceByDate).length
+        ) {
+          member.attendanceByDate = {
+            ...(member.attendanceByDate || {}),
+            ...prev.attendanceByDate,
+          };
+          syncMemberAttendanceDisplay(member);
+          touched = true;
         }
         if (touched) kept += 1;
       }

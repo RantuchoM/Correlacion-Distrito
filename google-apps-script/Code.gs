@@ -11,12 +11,19 @@
  * 5. Copiá la URL de la app web y pegala en la app (campo "URL Apps Script").
  *
  * La app envía Content-Type: text/plain (evita preflight CORS).
+ *
+ * Hojas:
+ * - Informe: JSON del informe (sin historial domingo-a-domingo; eso va a Asistencia).
+ * - Miembros: tabla legible (ratio de asistencia en columna).
+ * - Asistencia: una fila por persona × domingo (acumulable).
+ * - Acceso: links cortos.
  */
 
 var SCRIPT_TOKEN = "CAMBIAR_ESTE_TOKEN";
 var SHEET_MIEMBROS = "Miembros";
 var SHEET_INFORME = "Informe";
 var SHEET_ACCESO = "Acceso";
+var SHEET_ASISTENCIA = "Asistencia";
 /** URL pública de la app (GitHub Pages). */
 var APP_BASE_URL = "https://rantuchom.github.io/Correlacion-Distrito/";
 
@@ -94,12 +101,17 @@ function ensureSheet_(name) {
 }
 
 function saveReport_(report) {
-  var sh = ensureSheet_(SHEET_INFORME);
-  sh.clear();
-  sh.getRange(1, 1).setValue(JSON.stringify(report));
-  sh.getRange(2, 1).setValue(new Date().toISOString());
+  writeAsistenciaFromReport_(report);
   writeMiembrosFromReport_(report);
   writeAccesoSheet_();
+
+  // Informe JSON sin attendanceByDate (el historial vive en la pestaña Asistencia).
+  var slim = JSON.parse(JSON.stringify(report || {}));
+  stripAttendanceLog_(slim);
+  var sh = ensureSheet_(SHEET_INFORME);
+  sh.clear();
+  sh.getRange(1, 1).setValue(JSON.stringify(slim));
+  sh.getRange(2, 1).setValue(new Date().toISOString());
 }
 
 /** Ejecutable desde el editor: rellena la pestaña Acceso. */
@@ -139,18 +151,171 @@ function writeAccesoSheet_() {
 }
 
 function loadReport_() {
+  var report = null;
   var sh = getSpreadsheet_().getSheetByName(SHEET_INFORME);
   if (sh) {
     var raw = String(sh.getRange(1, 1).getValue() || "").trim();
     if (raw) {
       try {
-        return JSON.parse(raw);
+        report = JSON.parse(raw);
       } catch (e) {
-        // fall through to miembros
+        report = null;
       }
     }
   }
-  return miembrosSheetToReport_();
+  if (!report) report = miembrosSheetToReport_();
+  applyAsistenciaSheetToReport_(report);
+  syncAttendanceDisplays_(report);
+  return report;
+}
+
+function stripAttendanceLog_(report) {
+  (report.units || []).forEach(function (unit) {
+    (unit.members || []).forEach(function (m) {
+      if (m && m.attendanceByDate) delete m.attendanceByDate;
+    });
+  });
+}
+
+function lastNSundayKeys_(n, fromDate) {
+  var from = fromDate ? new Date(fromDate) : new Date();
+  var d = new Date(Date.UTC(from.getFullYear(), from.getMonth(), from.getDate()));
+  var day = d.getUTCDay();
+  var add = day === 0 ? 0 : 7 - day;
+  d.setUTCDate(d.getUTCDate() + add);
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    var x = new Date(d.getTime());
+    x.setUTCDate(d.getUTCDate() - i * 7);
+    out.push(x.toISOString().slice(0, 10));
+  }
+  return out;
+}
+
+function attendanceRatioFromLog_(byDate, n) {
+  n = n || 6;
+  var weeks = lastNSundayKeys_(n);
+  var done = 0;
+  for (var i = 0; i < weeks.length; i++) {
+    if (byDate && byDate[weeks[i]] === true) done += 1;
+  }
+  return done + "/" + n;
+}
+
+function syncAttendanceDisplays_(report) {
+  (report.units || []).forEach(function (unit) {
+    (unit.members || []).forEach(function (m) {
+      if (m && m.attendanceByDate && Object.keys(m.attendanceByDate).length) {
+        m.attendance = attendanceRatioFromLog_(m.attendanceByDate, 6);
+      }
+    });
+  });
+}
+
+/**
+ * Formato largo acumulable:
+ * Nombre | Unidad | Domingo | Asistió
+ */
+function writeAsistenciaFromReport_(report) {
+  var headers = ["Nombre", "Unidad", "Domingo", "Asistió"];
+  var rows = [headers];
+  (report.units || []).forEach(function (unit) {
+    (unit.members || []).forEach(function (m) {
+      var log = m && m.attendanceByDate;
+      if (!log || typeof log !== "object") return;
+      var dates = Object.keys(log).sort();
+      for (var i = 0; i < dates.length; i++) {
+        var iso = dates[i];
+        rows.push([
+          m.name || "",
+          unit.name || "",
+          iso,
+          log[iso] === true ? "Sí" : "No",
+        ]);
+      }
+    });
+  });
+  var sh = ensureSheet_(SHEET_ASISTENCIA);
+  sh.clear();
+  if (rows.length) {
+    var range = sh.getRange(1, 1, rows.length, headers.length);
+    range.setNumberFormat("@");
+    range.setValues(rows);
+  }
+  sh.setFrozenRows(1);
+}
+
+function applyAsistenciaSheetToReport_(report) {
+  var sh = getSpreadsheet_().getSheetByName(SHEET_ASISTENCIA);
+  if (!sh || sh.getLastRow() < 2) return report;
+
+  var values = sh.getDataRange().getValues();
+  var headers = values[0].map(function (h) {
+    return String(h || "").trim();
+  });
+  function col(name) {
+    return headers.indexOf(name);
+  }
+  var iName = col("Nombre");
+  var iUnit = col("Unidad");
+  var iDay = col("Domingo");
+  var iAtt = col("Asistió");
+  if (iName < 0 || iUnit < 0 || iDay < 0 || iAtt < 0) return report;
+
+  function normName(value) {
+    return String(value || "")
+      .replace(/,/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+  function nameKey(value) {
+    return normName(value)
+      .split(" ")
+      .filter(Boolean)
+      .sort()
+      .join(" ");
+  }
+  function normUnit(name) {
+    return String(name || "")
+      .replace(/^Rama\s+/i, "")
+      .trim()
+      .toLowerCase();
+  }
+
+  var byUnitKey = {};
+  for (var r = 1; r < values.length; r++) {
+    var row = values[r];
+    var name = String(row[iName] || "").trim();
+    var unit = String(row[iUnit] || "").trim();
+    var day = String(row[iDay] || "").trim().slice(0, 10);
+    var attRaw = String(row[iAtt] || "").trim().toLowerCase();
+    if (!name || !day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    var attended =
+      attRaw === "sí" ||
+      attRaw === "si" ||
+      attRaw === "true" ||
+      attRaw === "1" ||
+      attRaw === "x";
+    var key = normUnit(unit) + "::" + nameKey(name);
+    if (!byUnitKey[key]) byUnitKey[key] = {};
+    byUnitKey[key][day] = attended;
+  }
+
+  (report.units || []).forEach(function (unit) {
+    (unit.members || []).forEach(function (m) {
+      var key = normUnit(unit.name) + "::" + nameKey(m.name);
+      var log = byUnitKey[key];
+      if (!log) return;
+      if (!m.attendanceByDate || typeof m.attendanceByDate !== "object") {
+        m.attendanceByDate = {};
+      }
+      Object.keys(log).forEach(function (d) {
+        m.attendanceByDate[d] = log[d];
+      });
+    });
+  });
+  return report;
 }
 
 function writeMiembrosFromReport_(report) {
@@ -171,13 +336,17 @@ function writeMiembrosFromReport_(report) {
   var rows = [headers];
   (report.units || []).forEach(function (unit) {
     (unit.members || []).forEach(function (m) {
+      var ratio = m.attendance || "";
+      if (m.attendanceByDate && Object.keys(m.attendanceByDate).length) {
+        ratio = attendanceRatioFromLog_(m.attendanceByDate, 6);
+      }
       rows.push([
         m.name || "",
         unit.name || "",
         m.age || "",
         m.sex || "",
         m.baptism || "",
-        m.attendance || "",
+        ratio,
         m.temple || "",
         m.calling || "",
         m.assignment || "",
