@@ -3,7 +3,7 @@
   const SHEETS_CFG_KEY = "correlacion-distrito-sheets-cfg";
   /** Endpoint compartido: todas las vistas leen/escriben el mismo Sheets. */
   const DEFAULT_SHEETS_CFG = {
-    url: "https://script.google.com/macros/s/AKfycbzuuhippetrKZWYCnlHxPnbXTmZnSUr0NMu0xKgp9ibyZNJfgiBzEqyvQ_mhlLOBJQY/exec",
+    url: "https://script.google.com/macros/s/AKfycbw-LVNhUgAmQs-Zv1l9sdEG9HE4D5yzskT2am6O10057K4Kyl3ZHJXjPS_HDmWUxtjv/exec",
     token: "cd-viedma-mR7k9x2",
     autosave: true,
   };
